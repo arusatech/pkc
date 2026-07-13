@@ -1,10 +1,9 @@
 import { gzipSync } from "fflate";
 import {
   MarkItDown,
-  extractPdfBlocks,
+  createEmptyPdfDocumentBlocks,
   blocksToMarkdown,
-  loadPdfBlocksLocal,
-  savePdfBlocksLocal,
+  clearPdfBlocksLocal,
   generateStudyPkc,
   download_model,
   getActiveModelId,
@@ -283,14 +282,17 @@ export async function runProcess(): Promise<void> {
     const extension = extname(file.name);
 
     if (isPdf(file)) {
-      setStatus("Parsing PDF blocks…");
-      const cached = loadPdfBlocksLocal(file.name);
-      const doc = cached ?? (await extractPdfBlocks(bytes, { sort: true }));
-      if (!cached) savePdfBlocksLocal(file.name, doc);
+      setStatus("Opening PDF…");
+      // Fresh canvas every open: no auto-extracted blocks, no stale localStorage tags.
+      clearPdfBlocksLocal(file.name);
+      const doc = await createEmptyPdfDocumentBlocks(bytes);
 
       mountPdfEditor(bytes, doc, doc.title ?? null);
       const title = doc.title ? ` — ${doc.title}` : "";
-      setStatus(`PDF ready${title}`, "ok");
+      setStatus(
+        `PDF ready${title} · draw & tag regions, then Process Page`,
+        "ok",
+      );
       return;
     }
 

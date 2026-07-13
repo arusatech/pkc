@@ -225,7 +225,7 @@ export class ElectronCapacitorApp {
 // Set a CSP up for our application based on the custom scheme
 export function setupContentSecurityPolicy(customScheme: string): void {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const common = `default-src ${customScheme}://* 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; worker-src ${customScheme}://* blob: data:; img-src ${customScheme}://* data: blob:; connect-src ${customScheme}://* https: data: blob:`;
+    const common = `default-src ${customScheme}://* 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; font-src ${customScheme}://* data: blob:; style-src ${customScheme}://* 'unsafe-inline'; worker-src ${customScheme}://* blob: data:; img-src ${customScheme}://* data: blob:; connect-src ${customScheme}://* https: data: blob:`;
     callback({
       responseHeaders: {
         ...details.responseHeaders,

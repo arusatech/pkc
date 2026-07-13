@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PKC — Powered by Acharya Annadata</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="title-bar" id="title-bar">
+        <div class="title-bar-drag">
+          <h1 class="app-title">PKC - Powered by Acharya Annadata</h1>
+        </div>
+        <div class="title-bar-actions">
+          <button type="button" id="settings-btn" class="tb-btn" title="Settings" aria-label="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+          </button>
+          <button type="button" id="info-btn" class="tb-btn" title="About" aria-label="About">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4M12 8h.01" />
+            </svg>
+          </button>
+          <button type="button" id="close-btn" class="tb-btn tb-btn-close" title="Close" aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <nav class="tab-bar" id="tab-bar" aria-label="Panel toggles">
+        <button type="button" class="tab-btn active" data-panel="upload" aria-pressed="true" title="Add / upload">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span>Upload</span>
+        </button>
+        <button type="button" class="tab-btn" data-panel="blocks" aria-pressed="false" title="Blocks">
+          <span>Blocks</span>
+        </button>
+        <button type="button" class="tab-btn" data-panel="preview" aria-pressed="false" title="Preview">
+          <span>Preview</span>
+        </button>
+        <button type="button" class="tab-btn" data-panel="chat" aria-pressed="false" title="Chat — Model &amp; export">
+          <span>Chat</span>
+        </button>
+      </nav>
+
+      <p class="status" id="status" role="status"></p>
+
+      <main class="panel-row" id="panel-row">
+        <section class="panel panel-upload" id="panel-upload" data-panel="upload">
+          <header class="panel-head">
+            <h2 class="panel-title">Add / upload</h2>
+            <select id="file-select" class="file-select" disabled aria-label="Select file">
+              <option value="">No file</option>
+            </select>
+          </header>
+          <input type="file" id="file-input" hidden multiple />
+          <div class="drop-zone" id="drop-zone">
+            <p class="drop-label">Tap <strong>+</strong> or drop a file here</p>
+            <p class="drop-hint">pdf, docx, xlsx, pptx, csv, html, epub, …</p>
+          </div>
+        </section>
+
+        <section class="panel panel-blocks" id="panel-blocks" data-panel="blocks" hidden>
+          <header class="panel-head">
+            <h2 class="panel-title">Blocks</h2>
+            <button
+              type="button"
+              id="color-toggle"
+              class="hdr-btn color-toggle"
+              title="Monochrome — tap for colour"
+              aria-label="Toggle gray or colour mode"
+              aria-pressed="false"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 2a10 10 0 0 1 0 20" fill="currentColor" stroke="none" opacity="0.35" />
+              </svg>
+            </button>
+          </header>
+          <div class="blocks-body">
+            <div class="pdf-editor" id="pdf-editor"></div>
+            <p class="panel-empty" id="blocks-empty">Open a PDF to edit blocks.</p>
+          </div>
+        </section>
+
+        <section class="panel panel-preview" id="panel-preview" data-panel="preview" hidden>
+          <header class="panel-head">
+            <h2 class="panel-title">Preview</h2>
+            <button type="button" id="generate-study-pkc-btn" class="btn-chip" disabled>
+              Generate PKC
+            </button>
+          </header>
+          <p class="preview-hint" id="study-pkc-status" hidden></p>
+          <pre id="markdown-out" class="markdown-out"></pre>
+          <pre id="study-pkc-summary" class="study-pkc-summary" hidden></pre>
+          <p class="panel-empty" id="preview-empty">Process a file to see Markdown.</p>
+        </section>
+
+        <section class="panel panel-chat" id="panel-chat" data-panel="chat" hidden>
+          <header class="panel-head">
+            <h2 class="panel-title">Model &amp; export</h2>
+          </header>
+          <div class="model-card-body">
+            <label class="model-field">
+              <span class="model-field-label">GGUF model</span>
+              <select id="gguf-model-select" class="file-select dark" aria-label="Select GGUF model"></select>
+            </label>
+            <div class="btn-row compact">
+              <button type="button" id="gguf-download-btn" class="btn-chip">Download</button>
+              <button type="button" id="gguf-set-active-btn" class="btn-chip">Set active</button>
+            </div>
+            <p class="storage-hint" id="gguf-model-status">Select a chat model for AI formula / math fix</p>
+            <hr class="model-divider" />
+            <label class="model-check">
+              <input type="checkbox" id="pkc-toggle" checked />
+              Pack PKC on process
+            </label>
+            <div class="btn-row compact">
+              <button type="button" id="dl-md" class="btn-chip" disabled>Markdown</button>
+              <button type="button" id="dl-json" class="btn-chip" disabled hidden>Blocks JSON</button>
+              <button type="button" id="dl-pkc" class="btn-chip" disabled>PKC</button>
+              <button type="button" id="dl-study-pkc" class="btn-chip" disabled>Study PKC</button>
+            </div>
+            <p class="storage-hint">PDF blocks → localStorage · pack-it-pkc:pdf-blocks:&lt;file&gt;</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="settings-dialog" class="modal">
+      <form method="dialog" class="modal-card">
+        <header class="modal-head">
+          <h2>Settings</h2>
+          <button type="submit" class="tb-btn" value="cancel" aria-label="Close settings">×</button>
+        </header>
+        <div class="modal-body">
+          <label class="model-check">
+            <input type="checkbox" id="pref-pack-pkc" checked />
+            Pack PKC on process (default)
+          </label>
+          <label class="model-check">
+            <input type="checkbox" id="pref-color-mode" />
+            Colour images by default
+          </label>
+          <p class="storage-hint" id="pref-active-model">Active model: —</p>
+        </div>
+        <footer class="modal-foot">
+          <button type="submit" class="btn-chip" value="save" id="settings-save">Save</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="info-dialog" class="modal">
+      <form method="dialog" class="modal-card">
+        <header class="modal-head">
+          <h2>About</h2>
+          <button type="submit" class="tb-btn" value="cancel" aria-label="Close about">×</button>
+        </header>
+        <div class="modal-body about-body">
+          <p class="about-name">PKC — Portable Knowledge Cartridge</p>
+          <p class="about-powered">Powered by Acharya Annadata</p>
+          <p class="storage-hint" id="about-version">Version 1.0.0</p>
+        </div>
+        <footer class="modal-foot">
+          <button type="submit" class="btn-chip" value="ok">OK</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

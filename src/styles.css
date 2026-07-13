@@ -533,6 +533,8 @@ body.blocks-splitter-active img {
   font-size: 0.78rem;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .markdown-out:empty {

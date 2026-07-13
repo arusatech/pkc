@@ -5,12 +5,48 @@ import {
   setupCapacitorElectronPlugins,
 } from '@capacitor-community/electron';
 import chokidar from 'chokidar';
-import type { MenuItemConstructorOptions } from 'electron';
+import type { MenuItemConstructorOptions, WebContents } from 'electron';
 import { app, BrowserWindow, Menu, MenuItem, nativeImage, Tray, session } from 'electron';
 import electronIsDev from 'electron-is-dev';
 import electronServe from 'electron-serve';
 import windowStateKeeper from 'electron-window-state';
 import { join } from 'path';
+
+/** Right-click Cut / Copy / Paste / Select All for editable fields and selected text. */
+function setupEditContextMenu(webContents: WebContents): void {
+  webContents.on('context-menu', (_event, params) => {
+    const { editFlags, isEditable, selectionText } = params;
+    const hasSelection = Boolean(selectionText && selectionText.trim().length > 0);
+    const template: MenuItemConstructorOptions[] = [];
+
+    if (isEditable) {
+      template.push(
+        { role: 'undo', enabled: editFlags.canUndo },
+        { role: 'redo', enabled: editFlags.canRedo },
+        { type: 'separator' },
+        { role: 'cut', enabled: editFlags.canCut },
+        { role: 'copy', enabled: editFlags.canCopy },
+        { role: 'paste', enabled: editFlags.canPaste },
+        { role: 'delete', enabled: editFlags.canDelete },
+        { type: 'separator' },
+        { role: 'selectAll', enabled: editFlags.canSelectAll },
+      );
+    } else if (hasSelection) {
+      template.push({ role: 'copy', enabled: editFlags.canCopy });
+    }
+
+    if (electronIsDev) {
+      if (template.length) template.push({ type: 'separator' });
+      template.push({
+        label: 'Inspect Element',
+        click: () => webContents.inspectElement(params.x, params.y),
+      });
+    }
+
+    if (!template.length) return;
+    Menu.buildFromTemplate(template).popup();
+  });
+}
 
 // Define components for a watcher to detect when the webapp is changed so we can reload in Dev mode.
 const reloadWatcher = {
@@ -129,6 +165,9 @@ export class ElectronCapacitorApp {
       },
     });
     this.mainWindowState.manage(this.MainWindow);
+
+    // Editable fields / selected text: Cut, Copy, Paste, Select All
+    setupEditContextMenu(this.MainWindow.webContents);
 
     if (this.CapacitorFileConfig.backgroundColor) {
       this.MainWindow.setBackgroundColor(this.CapacitorFileConfig.electron.backgroundColor);

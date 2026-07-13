@@ -126,6 +126,34 @@ body {
   flex-shrink: 0;
 }
 
+.tab-file-select {
+  margin-left: auto;
+  max-width: min(280px, 40vw);
+  height: 30px;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.15);
+  color: #fff;
+}
+
+.tab-file-select option {
+  color: var(--text);
+  background: var(--panel);
+}
+
+.tab-file-select[hidden] {
+  display: none !important;
+}
+
+.browse-btn {
+  margin-top: 0.85rem;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.browse-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .tab-btn {
   display: inline-flex;
   align-items: center;
@@ -176,7 +204,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: row;
-  gap: 8px;
+  gap: 0;
   padding: 8px;
   min-height: 0;
   overflow: hidden;
@@ -196,6 +224,52 @@ body {
 
 .panel[hidden] {
   display: none !important;
+}
+
+.panel-splitter {
+  position: relative;
+  width: 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  flex: 0 0 6px;
+  align-self: stretch;
+  z-index: 5;
+}
+
+.panel-splitter::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.12s, box-shadow 0.12s;
+}
+
+.panel-splitter:hover::before,
+.panel-splitter.dragging::before,
+.panel-splitter:focus-visible::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.panel-splitter:focus-visible {
+  outline: none;
+}
+
+body.panel-splitter-active {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.panel-splitter-active iframe,
+body.panel-splitter-active img {
+  pointer-events: none !important;
 }
 
 .panel-head {
@@ -637,10 +711,15 @@ body.blocks-splitter-active img {
   .panel-row {
     flex-direction: column;
     overflow: auto;
+    gap: 8px;
   }
 
   .panel {
-    flex: 1 0 auto;
+    flex: 1 0 auto !important;
     min-height: 220px;
+  }
+
+  .panel-splitter {
+    display: none !important;
   }
 }

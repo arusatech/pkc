@@ -24,6 +24,7 @@ import {
   isPdf,
 } from "./app-state";
 import { attachBlocksSplitter } from "../ui/blocks-splitter";
+import { enterPickMode, enterWorkMode } from "../ui/tab-bar";
 
 const PKC_MAGIC = new Uint8Array([0x50, 0x4b, 0x43, 0x01]);
 let detachBlocksSplitter: (() => void) | null = null;
@@ -159,11 +160,12 @@ export function refreshFileSelect(): void {
     opt.textContent = "No file";
     els.fileSelect.append(opt);
     els.fileSelect.disabled = true;
-    els.dropZone.hidden = false;
+    els.fileSelect.hidden = true;
+    enterPickMode();
     return;
   }
 
-  els.dropZone.hidden = true;
+  els.fileSelect.hidden = false;
   els.fileSelect.disabled = false;
 
   for (const item of state.fileQueue) {
@@ -321,8 +323,13 @@ export function enqueueFiles(files: FileList | File[]): void {
     if (!state.activeFileId) state.activeFileId = id;
   }
 
+  // Switch to the last added file
+  const last = state.fileQueue[state.fileQueue.length - 1]!;
+  state.activeFileId = last.id;
+
   refreshFileSelect();
   resetOutput();
+  enterWorkMode({ pdf: isPdf(last.file) });
   setStatus(`Added ${list.length} file${list.length > 1 ? "s" : ""}…`);
   void runProcess();
 }
@@ -330,7 +337,9 @@ export function enqueueFiles(files: FileList | File[]): void {
 function switchFile(fileId: string): void {
   if (!state.fileQueue.some((q) => q.id === fileId)) return;
   state.activeFileId = fileId;
+  const file = activeFile();
   resetOutput();
+  if (file) enterWorkMode({ pdf: isPdf(file) });
   void runProcess();
 }
 
@@ -470,7 +479,15 @@ export function wireConvertUi(): void {
     updateColorToggleUi();
   });
 
-  els.dropZone.addEventListener("click", () => els.fileInput.click());
+  const openPicker = () => els.fileInput.click();
+  document.getElementById("browse-btn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openPicker();
+  });
+  els.dropZone.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("#browse-btn")) return;
+    openPicker();
+  });
 
   els.fileInput.addEventListener("change", () => {
     if (els.fileInput.files?.length) enqueueFiles(els.fileInput.files);

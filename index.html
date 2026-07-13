@@ -49,6 +49,9 @@
         <button type="button" class="tab-btn" data-panel="chat" aria-pressed="false" title="Chat — Model &amp; export">
           <span>Chat</span>
         </button>
+        <select id="file-select" class="file-select tab-file-select" disabled aria-label="Select file" hidden>
+          <option value="">No file</option>
+        </select>
       </nav>
 
       <p class="status" id="status" role="status"></p>
@@ -57,14 +60,12 @@
         <section class="panel panel-upload" id="panel-upload" data-panel="upload">
           <header class="panel-head">
             <h2 class="panel-title">Add / upload</h2>
-            <select id="file-select" class="file-select" disabled aria-label="Select file">
-              <option value="">No file</option>
-            </select>
           </header>
           <input type="file" id="file-input" hidden multiple />
           <div class="drop-zone" id="drop-zone">
-            <p class="drop-label">Tap <strong>+</strong> or drop a file here</p>
+            <p class="drop-label">Drop a file here or browse</p>
             <p class="drop-hint">pdf, docx, xlsx, pptx, csv, html, epub, …</p>
+            <button type="button" id="browse-btn" class="btn-chip browse-btn">Browse files</button>
           </div>
         </section>
 

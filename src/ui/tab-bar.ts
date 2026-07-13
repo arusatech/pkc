@@ -1,4 +1,6 @@
-export type PanelId = "upload" | "blocks" | "preview" | "chat";
+import { syncPanelRowSplitters, type PanelId } from "./panel-splitters";
+
+export type { PanelId };
 
 const STORAGE_KEY = "pkc:visible-panels";
 
@@ -8,6 +10,9 @@ const DEFAULT_VISIBLE: Record<PanelId, boolean> = {
   preview: false,
   chat: false,
 };
+
+let visible = loadVisible();
+let applyFn: (() => void) | null = null;
 
 function loadVisible(): Record<PanelId, boolean> {
   try {
@@ -24,16 +29,32 @@ function saveVisible(state: Record<PanelId, boolean>): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+/** After a file is picked: hide Upload and open work panes. */
+export function enterWorkMode(opts: { pdf: boolean }): void {
+  visible.upload = false;
+  visible.blocks = opts.pdf;
+  visible.preview = true;
+  // Keep chat as-is if user already had it open
+  applyFn?.();
+}
+
+/** When the queue is empty: return to the Upload picker. */
+export function enterPickMode(): void {
+  visible.upload = true;
+  visible.blocks = false;
+  visible.preview = false;
+  visible.chat = false;
+  applyFn?.();
+}
+
 export function initTabBar(): {
   getVisible: () => Record<PanelId, boolean>;
   setVisible: (id: PanelId, on: boolean) => void;
 } {
   const tabBar = document.getElementById("tab-bar")!;
   const panels = document.querySelectorAll<HTMLElement>(".panel[data-panel]");
-  let visible = loadVisible();
 
   function apply(): void {
-    // Keep at least one panel visible
     if (!Object.values(visible).some(Boolean)) {
       visible.upload = true;
     }
@@ -51,7 +72,10 @@ export function initTabBar(): {
     }
 
     saveVisible(visible);
+    syncPanelRowSplitters();
   }
+
+  applyFn = apply;
 
   tabBar.addEventListener("click", (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".tab-btn");
@@ -59,6 +83,10 @@ export function initTabBar(): {
     const id = btn.dataset.panel as PanelId;
     visible[id] = !visible[id];
     apply();
+  });
+
+  window.addEventListener("resize", () => {
+    syncPanelRowSplitters();
   });
 
   apply();

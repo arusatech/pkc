@@ -140,13 +140,36 @@ function packToPkcBrowser(
   return out;
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      const comma = dataUrl.indexOf(",");
+      resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read blob"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Prefer `<tmpdir>/AcharyaAnnadata/exports`, else browser Downloads via anchor. */
+async function downloadBlob(blob: Blob, filename: string): Promise<string> {
+  const fs = window.acharyaFs;
+  if (fs?.writeBytes) {
+    const safe = filename.replace(/[/\\]/g, "_");
+    const relativePath = `exports/${safe}`;
+    const path = await fs.writeBytes(relativePath, await blobToBase64(blob));
+    return path;
+  }
+
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+  return filename;
 }
 
 export function refreshFileSelect(): void {
@@ -402,13 +425,21 @@ async function handleGenerateStudyPkc(): Promise<void> {
   }
 }
 
-export function updateGgufModelStatus(): void {
+export async function updateGgufModelStatus(): Promise<void> {
   const id = els.ggufModelSelect.value || getActiveModelId();
   const active = getActiveModelId();
   const providerNote = state.llmProvider
     ? "LLM provider ready"
     : "No LLM provider (download still works; AI fix needs llama-cpp-capacitor)";
-  els.ggufModelStatus.textContent = `Selected: ${id} · Active: ${active} · ${providerNote}`;
+  let rootNote = "";
+  try {
+    if (window.acharyaFs) {
+      rootNote = ` · Store: ${await window.acharyaFs.getRootDir()}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  els.ggufModelStatus.textContent = `Selected: ${id} · Active: ${active} · ${providerNote}${rootNote}`;
   els.ggufDownloadBtn.disabled = state.ggufDownloading || !id;
   els.ggufSetActiveBtn.disabled = !id;
 }
@@ -452,7 +483,11 @@ async function handleGgufDownload(): Promise<void> {
     });
     setActiveModelId(modelId);
     await refreshGgufModelSelect();
-    setStatus(`Downloaded ${modelId} (${info.sizeBytes.toLocaleString()} bytes)`, "ok");
+    setStatus(
+      `Downloaded ${modelId} → ${info.path} (${info.sizeBytes.toLocaleString()} bytes)`,
+      "ok",
+    );
+    els.ggufModelStatus.textContent = `Saved: ${info.path}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatus(`Download failed: ${message}`, "err");
@@ -525,35 +560,35 @@ export function wireConvertUi(): void {
 
   els.dlMd.addEventListener("click", () => {
     if (!state.lastResult) return;
-    downloadBlob(
+    void downloadBlob(
       new Blob([state.lastResult.markdown], { type: "text/markdown;charset=utf-8" }),
       `${state.lastResult.baseName}.md`,
-    );
+    ).then((path) => setStatus(`Saved markdown → ${path}`, "ok"));
   });
 
   els.dlPkc.addEventListener("click", () => {
     if (!state.lastPkc || !state.lastResult) return;
-    downloadBlob(
+    void downloadBlob(
       new Blob([state.lastPkc], { type: "application/octet-stream" }),
       `${state.lastResult.baseName}.pkc`,
-    );
+    ).then((path) => setStatus(`Saved PKC → ${path}`, "ok"));
   });
 
   els.dlStudyPkc.addEventListener("click", () => {
     if (!state.lastStudyPkc || !state.lastResult) return;
-    downloadBlob(
+    void downloadBlob(
       new Blob([state.lastStudyPkc], { type: "application/octet-stream" }),
       `${state.lastResult.baseName}.study.pkc`,
-    );
+    ).then((path) => setStatus(`Saved Study PKC → ${path}`, "ok"));
   });
 
   els.dlJson.addEventListener("click", () => {
     const blocks = state.canvasEditor?.getDocument() ?? state.lastResult?.pdfBlocks;
     if (!blocks || !state.lastResult) return;
-    downloadBlob(
+    void downloadBlob(
       new Blob([JSON.stringify(blocks, null, 2)], { type: "application/json;charset=utf-8" }),
       `${state.lastResult.baseName}.blocks.json`,
-    );
+    ).then((path) => setStatus(`Saved blocks JSON → ${path}`, "ok"));
   });
 
   els.generateStudyPkcBtn.addEventListener("click", () => void handleGenerateStudyPkc());

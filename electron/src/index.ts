@@ -6,10 +6,14 @@ import electronIsDev from 'electron-is-dev';
 import unhandled from 'electron-unhandled';
 import { autoUpdater } from 'electron-updater';
 
+import { registerAcharyaFsIpc } from './acharya-fs';
 import { ElectronCapacitorApp, setupContentSecurityPolicy, setupReloadWatcher } from './setup';
 
 // Graceful handling of unhandled errors.
 unhandled();
+
+// Model / export downloads → <tmpdir>/AcharyaAnnadata/
+registerAcharyaFsIpc();
 
 // Define our menu templates (these are optional)
 const trayMenuTemplate: (MenuItemConstructorOptions | MenuItem)[] = [new MenuItem({ label: 'Quit App', role: 'quit' })];

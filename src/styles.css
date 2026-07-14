@@ -498,10 +498,24 @@ body.blocks-splitter-active img {
   gap: 0.5rem;
   padding: 0 8px 8px;
   max-height: none !important;
+  position: relative;
 }
 
-.panel-blocks .pce-panel-header {
-  margin-top: 8px;
+/* Sit Process Page in the "Blocks" header strip (::before), right-aligned */
+.panel-blocks .pce-process-page-bar {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 2;
+}
+
+.panel-blocks .pce-process-page-btn {
+  font-size: 0.68rem;
+  padding: 0.2rem 0.55rem;
 }
 
 @container blocks-panel (max-width: 640px) {

@@ -13,8 +13,8 @@
     "postinstall": "node ./scripts/ensure-electron.mjs",
     "electron:start-live": "node ./live-runner.js",
     "electron:start": "npm run build && electron --inspect=5858 ./",
-    "electron:pack": "npm run build && electron-builder build --dir -c ./electron-builder.config.json",
-    "electron:make": "npm run build && electron-builder build -c ./electron-builder.config.json -p never"
+    "electron:pack": "npm run build && electron-builder build --dir -c ./electron-builder.config.cjs",
+    "electron:make": "npm run build && electron-builder build -c ./electron-builder.config.cjs -p never"
   },
   "dependencies": {
     "@capacitor-community/electron": "^5.0.0",
@@ -23,7 +23,8 @@
     "electron-serve": "~1.1.0",
     "electron-unhandled": "~4.0.1",
     "electron-updater": "^5.3.0",
-    "electron-window-state": "^5.0.3"
+    "electron-window-state": "^5.0.3",
+    "llama-cpp-pro": "file:///Users/annadata/Project_A/llama-cpp-pro"
   },
   "devDependencies": {
     "electron": "^26.6.10",

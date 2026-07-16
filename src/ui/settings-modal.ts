@@ -1,3 +1,5 @@
+import { loadCloudPrefs, saveCloudPrefs, type CloudExportPrefs } from "../export/cloud-prefs";
+
 const PREF_PACK = "pkc:pref:pack-pkc";
 const PREF_COLOR = "pkc:pref:color-mode";
 
@@ -26,6 +28,19 @@ export function initSettingsModal(opts: {
   const packEl = document.getElementById("pref-pack-pkc") as HTMLInputElement;
   const colorEl = document.getElementById("pref-color-mode") as HTMLInputElement;
   const activeEl = document.getElementById("pref-active-model")!;
+  const googleIdEl = document.getElementById("pref-google-client-id") as HTMLInputElement;
+  const googleSecretEl = document.getElementById(
+    "pref-google-client-secret",
+  ) as HTMLInputElement;
+  const dropboxKeyEl = document.getElementById("pref-dropbox-app-key") as HTMLInputElement;
+  const dropboxSecretEl = document.getElementById(
+    "pref-dropbox-app-secret",
+  ) as HTMLInputElement;
+  const redirectEl = document.getElementById("settings-oauth-redirect");
+
+  void window.pkcExport?.oauthRedirectUri().then((uri) => {
+    if (redirectEl) redirectEl.textContent = uri;
+  });
 
   dialog.addEventListener("close", () => {
     if (dialog.returnValue !== "save") return;
@@ -34,6 +49,13 @@ export function initSettingsModal(opts: {
       colorMode: colorEl.checked,
     };
     savePrefs(prefs);
+    const cloud: CloudExportPrefs = {
+      googleClientId: googleIdEl.value,
+      googleClientSecret: googleSecretEl.value,
+      dropboxAppKey: dropboxKeyEl.value,
+      dropboxAppSecret: dropboxSecretEl.value,
+    };
+    saveCloudPrefs(cloud);
     opts.onSave(prefs);
   });
 
@@ -42,6 +64,11 @@ export function initSettingsModal(opts: {
     packEl.checked = prefs.packPkc;
     colorEl.checked = prefs.colorMode;
     activeEl.textContent = `Active model: ${opts.getActiveModelLabel()}`;
+    const cloud = loadCloudPrefs();
+    googleIdEl.value = cloud.googleClientId;
+    googleSecretEl.value = cloud.googleClientSecret;
+    dropboxKeyEl.value = cloud.dropboxAppKey;
+    dropboxSecretEl.value = cloud.dropboxAppSecret;
   };
 
   document.getElementById("settings-btn")!.addEventListener("click", syncForm);

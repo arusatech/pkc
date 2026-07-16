@@ -1,4 +1,4 @@
-import { gzipSync } from "fflate";
+import { gzipSync, gunzipSync } from "fflate";
 import {
   MarkItDown,
   createEmptyPdfDocumentBlocks,
@@ -11,7 +11,11 @@ import {
   listModelsWithStatus,
   LFM2_CHAT_MODEL_ID,
   DEFAULT_OFFLINE_MODEL_ID,
+  packStudyPkc,
   setActiveModelId,
+  unpackPkc,
+  PKC_STUDY_VERSION,
+  loadPkcForChat,
   type PdfDocumentBlocks,
 } from "@annadata/pack-it-pkc";
 import { PdfCanvasEditor } from "@annadata/pack-it-pkc/pdf/editor";
@@ -21,12 +25,29 @@ import {
   basename,
   extname,
   isPdf,
+  isPkcFile,
 } from "./app-state";
 import { attachBlocksSplitter } from "../ui/blocks-splitter";
 import { enterPickMode, enterWorkMode } from "../ui/tab-bar";
+import { createStudyQuiz, type StudyQuizController } from "../ui/study-quiz";
+import { initExportModal, type ExportArtifact } from "../ui/export-modal";
+import { initChatPanel } from "../ui/chat-panel";
 
 const PKC_MAGIC = new Uint8Array([0x50, 0x4b, 0x43, 0x01]);
 let detachBlocksSplitter: (() => void) | null = null;
+type PreviewMode = "markdown" | "pkc";
+let previewMode: PreviewMode = "markdown";
+let previewEditTimer: ReturnType<typeof setTimeout> | null = null;
+let studyQuiz: StudyQuizController | null = null;
+let openExport: ((artifact: ExportArtifact) => void) | null = null;
+
+function looksLikePkcMagic(bytes: Uint8Array): boolean {
+  if (bytes.length < PKC_MAGIC.length) return false;
+  for (let i = 0; i < PKC_MAGIC.length; i++) {
+    if (bytes[i] !== PKC_MAGIC[i]) return false;
+  }
+  return true;
+}
 
 const els = {
   get fileInput() {
@@ -50,11 +71,23 @@ const els = {
   get previewEmpty() {
     return document.getElementById("preview-empty")!;
   },
-  get markdownOut() {
-    return document.getElementById("markdown-out")!;
+  get previewEditor() {
+    return document.getElementById("preview-editor") as HTMLTextAreaElement;
+  },
+  get previewModeMd() {
+    return document.getElementById("preview-mode-md") as HTMLButtonElement;
+  },
+  get previewModePkc() {
+    return document.getElementById("preview-mode-pkc") as HTMLButtonElement;
   },
   get studyPkcStatus() {
     return document.getElementById("study-pkc-status")!;
+  },
+  get studyStatusBar() {
+    return document.getElementById("study-status-bar")!;
+  },
+  get studyExportBtn() {
+    return document.getElementById("study-export-btn") as HTMLButtonElement;
   },
   get studyPkcSummary() {
     return document.getElementById("study-pkc-summary") as HTMLPreElement;
@@ -76,9 +109,6 @@ const els = {
   },
   get dlStudyPkc() {
     return document.getElementById("dl-study-pkc") as HTMLButtonElement;
-  },
-  get generateStudyPkcBtn() {
-    return document.getElementById("generate-study-pkc-btn") as HTMLButtonElement;
   },
   get ggufModelSelect() {
     return document.getElementById("gguf-model-select") as HTMLSelectElement;
@@ -110,12 +140,27 @@ export function updateColorToggleUi(): void {
 
 export function updateDownloadButtons(): void {
   const hasResult = !!state.lastResult;
+  const canGenerateStudy = !!state.lastResult?.pdfBlocks;
   els.dlMd.disabled = !hasResult;
   els.dlJson.disabled = !hasResult || !state.lastResult?.pdfBlocks;
   els.dlJson.hidden = !state.lastResult?.pdfBlocks;
   els.dlPkc.disabled = !state.lastPkc;
   els.dlStudyPkc.disabled = !state.lastStudyPkc;
-  els.generateStudyPkcBtn.disabled = !state.lastResult?.pdfBlocks || state.generatingStudyPkc;
+  els.studyExportBtn.disabled = !state.lastStudyPkc || state.generatingStudyPkc;
+  els.previewModePkc.disabled = (!hasPkcPreview() && !canGenerateStudy) || state.generatingStudyPkc;
+  els.previewModePkc.textContent = state.generatingStudyPkc ? "PKC…" : "PKC";
+  studyQuiz?.syncActionButtons();
+}
+
+function openStudyPkcExport(): void {
+  if (!state.lastStudyPkc || !state.lastResult || !openExport) return;
+  openExport({
+    label: "Study PKC",
+    filename: `${state.lastResult.baseName}.study.pkc`,
+    blob: new Blob([Uint8Array.from(state.lastStudyPkc)], {
+      type: "application/octet-stream",
+    }),
+  });
 }
 
 function packToPkcBrowser(
@@ -131,6 +176,10 @@ function packToPkcBrowser(
     metadata: {},
     createdAt: new Date().toISOString(),
   };
+  return packJsonToPkc(doc);
+}
+
+function packJsonToPkc(doc: unknown): Uint8Array {
   const json = new TextEncoder().encode(JSON.stringify(doc));
   const compressed = gzipSync(json);
   const out = new Uint8Array(PKC_MAGIC.length + 4 + compressed.length);
@@ -138,6 +187,161 @@ function packToPkcBrowser(
   new DataView(out.buffer).setUint32(PKC_MAGIC.length, compressed.length, false);
   out.set(compressed, PKC_MAGIC.length + 4);
   return out;
+}
+
+function unpackPkcJson(data: Uint8Array): unknown {
+  if (data.length < PKC_MAGIC.length + 4) throw new Error("Invalid PKC: too short");
+  for (let i = 0; i < PKC_MAGIC.length; i++) {
+    if (data[i] !== PKC_MAGIC[i]) throw new Error("Invalid PKC magic header");
+  }
+  const payloadLen = new DataView(data.buffer, data.byteOffset).getUint32(PKC_MAGIC.length, false);
+  const payload = data.subarray(PKC_MAGIC.length + 4, PKC_MAGIC.length + 4 + payloadLen);
+  return JSON.parse(new TextDecoder().decode(gunzipSync(payload)));
+}
+
+function hasPkcPreview(): boolean {
+  return !!(state.lastStudyDoc || state.lastStudyPkc || state.lastPkc || state.lastResult);
+}
+
+function getPkcJsonForEditor(): string {
+  if (state.lastStudyDoc) {
+    return JSON.stringify(state.lastStudyDoc, null, 2);
+  }
+  if (state.lastStudyPkc) {
+    return JSON.stringify(unpackPkcJson(state.lastStudyPkc), null, 2);
+  }
+  if (state.lastPkc) {
+    return JSON.stringify(unpackPkcJson(state.lastPkc), null, 2);
+  }
+  if (state.lastResult) {
+    return JSON.stringify(
+      {
+        version: 1,
+        title: state.lastResult.title ?? null,
+        source: activeFile()?.name ?? null,
+        mimetype: "text/markdown",
+        markdown: state.lastResult.markdown,
+        metadata: {},
+        createdAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    );
+  }
+  return "";
+}
+
+function setPreviewMode(mode: PreviewMode): void {
+  previewMode = mode;
+  els.previewModeMd.classList.toggle("active", mode === "markdown");
+  els.previewModePkc.classList.toggle("active", mode === "pkc");
+  els.previewModeMd.setAttribute("aria-pressed", String(mode === "markdown"));
+  els.previewModePkc.setAttribute("aria-pressed", String(mode === "pkc"));
+  studyQuiz?.close();
+  refreshPreviewEditor();
+}
+
+function refreshPreviewEditor(): void {
+  const hasResult = !!state.lastResult;
+  studyQuiz?.syncActionButtons();
+
+  if (!hasResult) {
+    els.previewEditor.hidden = true;
+    els.previewEditor.value = "";
+    els.previewEmpty.hidden = false;
+    updateDownloadButtons();
+    return;
+  }
+
+  els.previewEmpty.hidden = true;
+  if (studyQuiz?.isOpen()) {
+    els.previewEditor.hidden = true;
+  } else {
+    els.previewEditor.hidden = false;
+  }
+  updateDownloadButtons();
+
+  if (previewMode === "markdown") {
+    els.previewEditor.value = state.lastResult?.markdown ?? "";
+    els.previewEditor.placeholder = "Markdown output…";
+    els.studyPkcSummary.hidden = true;
+  } else {
+    try {
+      els.previewEditor.value = getPkcJsonForEditor();
+      els.previewEditor.placeholder = "PKC JSON…";
+      els.studyPkcSummary.hidden = true;
+    } catch (err) {
+      els.previewEditor.value = "";
+      setStatus(`Failed to open PKC JSON: ${err instanceof Error ? err.message : String(err)}`, "err");
+    }
+  }
+}
+
+function persistStudyDoc(doc: NonNullable<typeof state.lastStudyDoc>): void {
+  state.lastStudyDoc = doc;
+  state.lastStudyPkc = packJsonToPkc(doc);
+  if (typeof doc.markdown === "string" && state.lastResult) {
+    state.lastResult = { ...state.lastResult, markdown: doc.markdown };
+  }
+  studyQuiz?.syncActionButtons();
+  updateDownloadButtons();
+  // Always refresh the PKC JSON buffer (even while the quiz overlay is open).
+  refreshPreviewEditor();
+  setStatus("Study PKC updated", "ok");
+}
+
+function applyMarkdownEdit(text: string): void {
+  if (!state.lastResult) return;
+  state.lastResult = { ...state.lastResult, markdown: text };
+  if (els.pkcToggle.checked) {
+    state.lastPkc = packToPkcBrowser(text, {
+      title: state.lastResult.title,
+      source: activeFile()?.name,
+    });
+  }
+  updateDownloadButtons();
+}
+
+function applyPkcJsonEdit(text: string): void {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>;
+  } catch (err) {
+    setStatus(`Invalid PKC JSON: ${err instanceof Error ? err.message : String(err)}`, "err");
+    return;
+  }
+
+  const version = Number(parsed.version ?? 0);
+  // Study PKC documents use version 2.
+  if (version === 2 || state.lastStudyDoc || state.lastStudyPkc) {
+    state.lastStudyDoc = parsed as unknown as NonNullable<typeof state.lastStudyDoc>;
+    state.lastStudyPkc = packJsonToPkc(parsed);
+    if (typeof parsed.markdown === "string" && state.lastResult) {
+      state.lastResult = { ...state.lastResult, markdown: parsed.markdown };
+    }
+    setStatus("Study PKC JSON updated", "ok");
+  } else {
+    const markdown = typeof parsed.markdown === "string" ? parsed.markdown : "";
+    if (state.lastResult) {
+      state.lastResult = {
+        ...state.lastResult,
+        markdown,
+        title: (parsed.title as string | null | undefined) ?? state.lastResult.title,
+      };
+    }
+    state.lastPkc = packJsonToPkc(parsed);
+    setStatus("PKC JSON updated", "ok");
+  }
+  updateDownloadButtons();
+}
+
+function onPreviewEditorInput(): void {
+  if (previewEditTimer) clearTimeout(previewEditTimer);
+  previewEditTimer = setTimeout(() => {
+    const text = els.previewEditor.value;
+    if (previewMode === "markdown") applyMarkdownEdit(text);
+    else applyPkcJsonEdit(text);
+  }, 350);
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -226,12 +430,17 @@ function resetOutput(): void {
   state.lastStudyPkc = null;
   state.lastStudyDoc = null;
   state.selectedBytes = null;
-  els.markdownOut.textContent = "";
+  previewMode = "markdown";
+  studyQuiz?.close();
+  els.previewEditor.value = "";
+  els.previewEditor.hidden = true;
   els.previewEmpty.hidden = false;
   els.studyPkcSummary.hidden = true;
   els.studyPkcSummary.textContent = "";
-  els.studyPkcStatus.hidden = true;
+  els.studyStatusBar.hidden = true;
   els.studyPkcStatus.textContent = "";
+  setPreviewMode("markdown");
+  studyQuiz?.syncActionButtons();
   updateDownloadButtons();
 }
 
@@ -252,11 +461,58 @@ function applyResult(
   state.lastStudyDoc = null;
   els.studyPkcSummary.hidden = true;
   els.studyPkcSummary.textContent = "";
-  els.studyPkcStatus.hidden = true;
+  els.studyStatusBar.hidden = true;
   els.studyPkcStatus.textContent = "";
+  studyQuiz?.close();
+  setPreviewMode("markdown");
+  updateDownloadButtons();
+}
 
-  els.markdownOut.textContent = markdown;
-  els.previewEmpty.hidden = true;
+/** Open an already-packed `.pkc` / `.study.pkc` without MarkItDown. */
+function applyImportedPkc(bytes: Uint8Array): void {
+  const file = activeFile();
+  if (!file) return;
+
+  const peeked = unpackPkc(bytes) as { version?: number; markdown?: string; title?: string | null };
+  const version = Number(peeked.version ?? 0);
+  const baseName = basename(file.name.replace(/\.study$/i, ""));
+
+  if (version === PKC_STUDY_VERSION) {
+    const study = loadPkcForChat(bytes);
+    state.lastResult = {
+      markdown: study.markdown || "",
+      title: study.title ?? null,
+      baseName,
+    };
+    state.lastPkc = null;
+    state.lastStudyDoc = study;
+    state.lastStudyPkc = bytes;
+    els.studyStatusBar.hidden = false;
+    els.studyPkcStatus.textContent = `Study PKC ready · ${study.stats.flashCardCount} flash · ${study.stats.mcqCount} MCQ`;
+    els.studyPkcSummary.hidden = true;
+    studyQuiz?.syncActionButtons();
+    setPreviewMode("markdown");
+    updateDownloadButtons();
+    return;
+  }
+
+  const markdown = typeof peeked.markdown === "string" ? peeked.markdown : "";
+  if (!markdown.trim()) {
+    throw new Error("PKC file has no markdown content");
+  }
+  state.lastResult = {
+    markdown,
+    title: peeked.title ?? null,
+    baseName,
+  };
+  state.lastPkc = bytes;
+  state.lastStudyPkc = null;
+  state.lastStudyDoc = null;
+  els.studyStatusBar.hidden = true;
+  els.studyPkcStatus.textContent = "";
+  els.studyPkcSummary.hidden = true;
+  studyQuiz?.close();
+  setPreviewMode("markdown");
   updateDownloadButtons();
 }
 
@@ -319,6 +575,24 @@ export async function runProcess(): Promise<void> {
       return;
     }
 
+    if (isPkcFile(file) || looksLikePkcMagic(bytes)) {
+      setStatus("Opening PKC…");
+      applyImportedPkc(bytes);
+      const study = state.lastStudyDoc;
+      if (study) {
+        setStatus(
+          `Loaded Study PKC · ${study.stats.flashCardCount} flash · ${study.stats.mcqCount} MCQ · ${(state.lastResult?.markdown.length ?? 0).toLocaleString()} chars`,
+          "ok",
+        );
+      } else {
+        setStatus(
+          `Loaded PKC · ${(state.lastResult?.markdown.length ?? 0).toLocaleString()} chars`,
+          "ok",
+        );
+      }
+      return;
+    }
+
     const md = new MarkItDown();
     const result = await md.convertBytes(bytes, {
       extension,
@@ -368,15 +642,50 @@ function switchFile(fileId: string): void {
   void runProcess();
 }
 
+async function handlePkcButton(): Promise<void> {
+  if (state.generatingStudyPkc) return;
+
+  const canGenerate = !!(state.canvasEditor?.getDocument() ?? state.lastResult?.pdfBlocks);
+  const hasStudy = !!(state.lastStudyPkc || state.lastStudyDoc);
+
+  // Already have a Study PKC → open/show it. Re-generate only when confirmed
+  // (re-clicking PKC used to always regenerate and wiped flash/MCQ edits).
+  if (hasStudy) {
+    const wantsRegenerate =
+      canGenerate &&
+      previewMode === "pkc" &&
+      !studyQuiz?.isOpen() &&
+      window.confirm(
+        "Regenerate Study PKC from the document?\n\nThis replaces the current flash cards and MCQs (including any edits).",
+      );
+    if (wantsRegenerate) {
+      await handleGenerateStudyPkc();
+      return;
+    }
+    studyQuiz?.close();
+    setPreviewMode("pkc");
+    return;
+  }
+
+  if (canGenerate) {
+    await handleGenerateStudyPkc();
+    return;
+  }
+  if (hasPkcPreview()) {
+    setPreviewMode("pkc");
+  }
+}
+
 async function handleGenerateStudyPkc(): Promise<void> {
   const doc = state.canvasEditor?.getDocument() ?? state.lastResult?.pdfBlocks;
   if (!doc || !state.lastResult || state.generatingStudyPkc) return;
 
   state.generatingStudyPkc = true;
   updateDownloadButtons();
-  els.studyPkcStatus.hidden = false;
+  els.studyStatusBar.hidden = false;
   els.studyPkcStatus.textContent = "Generating study PKC…";
   els.studyPkcSummary.hidden = true;
+  studyQuiz?.close();
 
   try {
     const result = await generateStudyPkc(doc, {
@@ -386,7 +695,7 @@ async function handleGenerateStudyPkc(): Promise<void> {
       chatModelId: getActiveModelId() ?? LFM2_CHAT_MODEL_ID,
       embeddingModelId: DEFAULT_OFFLINE_MODEL_ID,
       onProgress: (msg) => {
-        els.studyPkcStatus.hidden = false;
+        els.studyStatusBar.hidden = false;
         els.studyPkcStatus.textContent = msg;
       },
     });
@@ -403,12 +712,22 @@ async function handleGenerateStudyPkc(): Promise<void> {
     ];
     if (warnings?.length) {
       lines.push("", "warnings:", ...warnings.map((w) => `· ${w}`));
+      try {
+        if (window.acharyaFs) {
+          lines.push("", `store: ${await window.acharyaFs.getRootDir()}`);
+        }
+      } catch {
+        /* ignore */
+      }
     }
     els.studyPkcSummary.textContent = lines.join("\n");
-    els.studyPkcSummary.hidden = false;
+    els.studyPkcSummary.hidden = true;
+    els.studyStatusBar.hidden = false;
     els.studyPkcStatus.textContent = result.warnings.length
       ? `Study PKC ready with ${result.warnings.length} warning(s)`
       : "Study PKC ready";
+    studyQuiz?.syncActionButtons();
+    setPreviewMode("pkc");
     setStatus(
       `Study PKC · ${stats.flashCardCount} flash · ${stats.mcqCount} MCQ · ${stats.embeddedChunkCount}/${stats.chunkCount} embedded`,
       "ok",
@@ -417,7 +736,9 @@ async function handleGenerateStudyPkc(): Promise<void> {
     state.lastStudyPkc = null;
     state.lastStudyDoc = null;
     els.studyPkcSummary.hidden = true;
+    els.studyStatusBar.hidden = false;
     els.studyPkcStatus.textContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+    studyQuiz?.syncActionButtons();
     setStatus(`Study PKC failed: ${err instanceof Error ? err.message : String(err)}`, "err");
   } finally {
     state.generatingStudyPkc = false;
@@ -430,7 +751,7 @@ export async function updateGgufModelStatus(): Promise<void> {
   const active = getActiveModelId();
   const providerNote = state.llmProvider
     ? "LLM provider ready"
-    : "No LLM provider (download still works; AI fix needs llama-cpp-capacitor)";
+    : "No LLM provider (download still works; AI fix needs llama-cpp-pro)";
   let rootNote = "";
   try {
     if (window.acharyaFs) {
@@ -484,10 +805,10 @@ async function handleGgufDownload(): Promise<void> {
     setActiveModelId(modelId);
     await refreshGgufModelSelect();
     setStatus(
-      `Downloaded ${modelId} → ${info.path} (${info.sizeBytes.toLocaleString()} bytes)`,
+      `${info.cached ? "Using existing" : "Downloaded"} ${modelId} → ${info.path} (${info.sizeBytes.toLocaleString()} bytes)`,
       "ok",
     );
-    els.ggufModelStatus.textContent = `Saved: ${info.path}`;
+    els.ggufModelStatus.textContent = `${info.cached ? "Cached" : "Saved"}: ${info.path}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatus(`Download failed: ${message}`, "err");
@@ -559,39 +880,41 @@ export function wireConvertUi(): void {
   els.ggufModelSelect.addEventListener("change", () => updateGgufModelStatus());
 
   els.dlMd.addEventListener("click", () => {
-    if (!state.lastResult) return;
-    void downloadBlob(
-      new Blob([state.lastResult.markdown], { type: "text/markdown;charset=utf-8" }),
-      `${state.lastResult.baseName}.md`,
-    ).then((path) => setStatus(`Saved markdown → ${path}`, "ok"));
+    if (!state.lastResult || !openExport) return;
+    openExport({
+      label: "Markdown",
+      filename: `${state.lastResult.baseName}.md`,
+      blob: new Blob([state.lastResult.markdown], { type: "text/markdown;charset=utf-8" }),
+    });
   });
 
   els.dlPkc.addEventListener("click", () => {
-    if (!state.lastPkc || !state.lastResult) return;
-    void downloadBlob(
-      new Blob([state.lastPkc], { type: "application/octet-stream" }),
-      `${state.lastResult.baseName}.pkc`,
-    ).then((path) => setStatus(`Saved PKC → ${path}`, "ok"));
+    if (!state.lastPkc || !state.lastResult || !openExport) return;
+    openExport({
+      label: "PKC",
+      filename: `${state.lastResult.baseName}.pkc`,
+      blob: new Blob([Uint8Array.from(state.lastPkc)], { type: "application/octet-stream" }),
+    });
   });
 
-  els.dlStudyPkc.addEventListener("click", () => {
-    if (!state.lastStudyPkc || !state.lastResult) return;
-    void downloadBlob(
-      new Blob([state.lastStudyPkc], { type: "application/octet-stream" }),
-      `${state.lastResult.baseName}.study.pkc`,
-    ).then((path) => setStatus(`Saved Study PKC → ${path}`, "ok"));
-  });
+  els.dlStudyPkc.addEventListener("click", () => openStudyPkcExport());
+  els.studyExportBtn.addEventListener("click", () => openStudyPkcExport());
 
   els.dlJson.addEventListener("click", () => {
     const blocks = state.canvasEditor?.getDocument() ?? state.lastResult?.pdfBlocks;
-    if (!blocks || !state.lastResult) return;
-    void downloadBlob(
-      new Blob([JSON.stringify(blocks, null, 2)], { type: "application/json;charset=utf-8" }),
-      `${state.lastResult.baseName}.blocks.json`,
-    ).then((path) => setStatus(`Saved blocks JSON → ${path}`, "ok"));
+    if (!blocks || !state.lastResult || !openExport) return;
+    openExport({
+      label: "Blocks JSON",
+      filename: `${state.lastResult.baseName}.blocks.json`,
+      blob: new Blob([JSON.stringify(blocks, null, 2)], {
+        type: "application/json;charset=utf-8",
+      }),
+    });
   });
 
-  els.generateStudyPkcBtn.addEventListener("click", () => void handleGenerateStudyPkc());
+  els.previewModeMd.addEventListener("click", () => setPreviewMode("markdown"));
+  els.previewModePkc.addEventListener("click", () => void handlePkcButton());
+  els.previewEditor.addEventListener("input", () => onPreviewEditorInput());
 
   els.pkcToggle.addEventListener("change", () => {
     state.packPkcOnProcess = els.pkcToggle.checked;
@@ -603,6 +926,7 @@ export function wireConvertUi(): void {
           })
         : null;
       updateDownloadButtons();
+      if (previewMode === "pkc") refreshPreviewEditor();
     }
   });
 }
@@ -612,7 +936,44 @@ export async function initConvert(): Promise<void> {
   updateColorToggleUi();
   updateDownloadButtons();
   els.pkcToggle.checked = state.packPkcOnProcess;
+  openExport = initExportModal({
+    onStatus: (msg, kind) => setStatus(msg, kind),
+  }).open;
+  studyQuiz = createStudyQuiz({
+    getDoc: (source) => (source === "chat" ? state.chatStudyDoc : state.lastStudyDoc),
+    saveDoc: (doc, source) => {
+      if (source === "chat") {
+        state.chatStudyDoc = doc;
+        try {
+          state.chatStudyPkc = packStudyPkc(doc);
+        } catch {
+          /* keep previous bytes */
+        }
+        return;
+      }
+      persistStudyDoc(doc);
+    },
+    onOpen: () => {
+      els.previewEditor.hidden = true;
+      els.previewEmpty.hidden = true;
+      els.previewModeMd.classList.remove("active");
+      els.previewModePkc.classList.remove("active");
+    },
+    onClose: () => {
+      refreshPreviewEditor();
+      els.previewModeMd.classList.toggle("active", previewMode === "markdown");
+      els.previewModePkc.classList.toggle("active", previewMode === "pkc");
+    },
+  });
+  initChatPanel({
+    getStudyQuiz: () => studyQuiz,
+    onStatus: (msg, kind) => setStatus(msg, kind),
+    onImported: () => {
+      studyQuiz?.syncActionButtons();
+    },
+  });
   wireConvertUi();
+  setPreviewMode("markdown");
 
   await tryCreateLlmProvider();
   await refreshGgufModelSelect();
@@ -620,6 +981,6 @@ export async function initConvert(): Promise<void> {
   setStatus(
     state.llmProvider
       ? "Add a file to begin · LLM provider ready for AI fix"
-      : "Add a file to begin · download models anytime; AI fix needs llama-cpp-capacitor",
+      : "Add a file to begin · download models anytime; AI fix needs llama-cpp-pro",
   );
 }

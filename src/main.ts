@@ -15,7 +15,13 @@ import pkg from "../package.json";
 
 (globalThis as typeof globalThis & { Buffer: typeof Buffer }).Buffer = Buffer;
 
-const prefs = loadPrefs();
+// WASM fallback (desktop Electron prefers llama sidecar + IPC).
+const g = globalThis as typeof globalThis & {
+  __LLAMA_WORKER_URL__?: string;
+  __LLAMA_WASM_MODULE_URL__?: string;
+};
+g.__LLAMA_WORKER_URL__ = "/llama-cpp/workers/llm.worker.js";
+g.__LLAMA_WASM_MODULE_URL__ = "/llama-cpp/wasm/llama_engine.js";const prefs = loadPrefs();
 state.packPkcOnProcess = prefs.packPkc;
 state.imageColorMode = prefs.colorMode;
 

@@ -7,13 +7,12 @@ import unhandled from 'electron-unhandled';
 import { autoUpdater } from 'electron-updater';
 
 import { registerAcharyaFsIpc } from './acharya-fs';
+import { registerExportBridgeIpc } from './export-bridge';
+import { registerLlamaDesktop } from './llama-desktop';
 import { ElectronCapacitorApp, setupContentSecurityPolicy, setupReloadWatcher } from './setup';
 
 // Graceful handling of unhandled errors.
 unhandled();
-
-// Model / export downloads → <tmpdir>/AcharyaAnnadata/
-registerAcharyaFsIpc();
 
 // Define our menu templates (these are optional)
 const trayMenuTemplate: (MenuItemConstructorOptions | MenuItem)[] = [new MenuItem({ label: 'Quit App', role: 'quit' })];
@@ -46,6 +45,15 @@ if (electronIsDev) {
 (async () => {
   // Wait for electron app to be ready.
   await app.whenReady();
+  // Model / export downloads → <tmpdir>/AcharyaAnnadata/ (handlers must be live for renderer).
+  registerAcharyaFsIpc();
+  registerExportBridgeIpc();
+  // Desktop llama-cpp-pro sidecar IPC (Metal/CPU binaries from stage:desktop).
+  try {
+    registerLlamaDesktop({ ipcMain, app });
+  } catch (err) {
+    console.warn('[electron] llama-cpp-pro desktop IPC unavailable', err);
+  }
   // Security - Set Content-Security-Policy based on whether or not we are in dev mode.
   setupContentSecurityPolicy(myCapacitorApp.getCustomURLScheme());
   // Initialize our app, build windows, and load content.

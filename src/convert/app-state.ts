@@ -25,6 +25,10 @@ export const state = {
   lastPkc: null as Uint8Array | null,
   lastStudyPkc: null as Uint8Array | null,
   lastStudyDoc: null as PkcStudyDocument | null,
+  /** Chat-imported Study PKC (may differ from convert-side lastStudy*). */
+  chatStudyPkc: null as Uint8Array | null,
+  chatStudyDoc: null as PkcStudyDocument | null,
+  chatPkcName: null as string | null,
   canvasEditor: null as PdfCanvasEditor | null,
   imageColorMode: false,
   processing: false,
@@ -50,4 +54,10 @@ export function basename(filename: string): string {
 
 export function isPdf(file: File): boolean {
   return extname(file.name) === ".pdf" || file.type === "application/pdf";
+}
+
+/** Plain `.pkc` or Study `.study.pkc` / `.pkc` with study magic payload. */
+export function isPkcFile(file: File): boolean {
+  const ext = extname(file.name);
+  return ext === ".pkc" || file.name.toLowerCase().endsWith(".study.pkc");
 }

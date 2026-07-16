@@ -15,6 +15,8 @@ export default defineConfig({
   server: { port: 5173, open: true },
   resolve: {
     alias: {
+      // Canonical sibling package (not under ref-code/).
+      "llama-cpp-pro": "/Users/annadata/Project_A/llama-cpp-pro/dist/esm/index.js",
       "node:fs/promises": resolve(stubs, "fs-promises.ts"),
       "fs/promises": resolve(stubs, "fs-promises.ts"),
       "node:fs": resolve(stubs, "fs.ts"),
@@ -43,7 +45,10 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    // Prebundle llama so Cap web/desktop implementations resolve under Vite.
     exclude: ["mupdf"],
-    include: ["buffer", "fflate"],
+    include: ["buffer", "fflate", "llama-cpp-pro"],
   },
+  // Serve packaged wasm/workers for WASM fallback (desktop prefers sidecar).
+  publicDir: resolve(root, "public"),
 });

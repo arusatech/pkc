@@ -261,17 +261,45 @@ export class ElectronCapacitorApp {
   }
 }
 
-// Set a CSP up for our application based on the custom scheme
+// CSP + local sidecar CORS cleanup (custom scheme ↔ http://127.0.0.1).
 export function setupContentSecurityPolicy(customScheme: string): void {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const common = `default-src ${customScheme}://* 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; font-src ${customScheme}://* data: blob:; style-src ${customScheme}://* 'unsafe-inline'; worker-src ${customScheme}://* blob: data:; img-src ${customScheme}://* data: blob:; connect-src ${customScheme}://* https: data: blob:`;
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          electronIsDev ? `${common}; script-src ${customScheme}://* 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' devtools://*` : common,
-        ],
-      },
-    });
+    // Allow local llama-cpp-pro sidecar HTTP (127.0.0.1) — without this, fetch() fails as "Failed to fetch".
+    const connectSrc = `${customScheme}://* https: http://127.0.0.1:* http://localhost:* http://[::1]:* data: blob:`;
+    const common = `default-src ${customScheme}://* 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; font-src ${customScheme}://* data: blob:; style-src ${customScheme}://* 'unsafe-inline'; worker-src ${customScheme}://* blob: data:; img-src ${customScheme}://* data: blob:; connect-src ${connectSrc}`;
+
+    const responseHeaders: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(details.responseHeaders ?? {})) {
+      responseHeaders[key] = Array.isArray(value) ? [...value] : [String(value)];
+    }
+
+    // Sidecar currently sends Access-Control-Allow-Origin twice (default headers + set_cors) → "*, *".
+    // Browsers reject that; keep a single value for localhost responses.
+    const isLocalSidecar =
+      details.url.startsWith('http://127.0.0.1:') ||
+      details.url.startsWith('http://localhost:') ||
+      details.url.startsWith('http://[::1]:');
+    if (isLocalSidecar) {
+      for (const name of Object.keys(responseHeaders)) {
+        if (name.toLowerCase() === 'access-control-allow-origin') {
+          responseHeaders[name] = ['*'];
+        }
+      }
+    }
+
+    // Only attach CSP to app documents, not to sidecar API responses.
+    const isAppDoc =
+      details.url.startsWith(`${customScheme}://`) ||
+      details.url.startsWith('http://localhost') ||
+      details.url.startsWith('file://');
+    if (isAppDoc && !isLocalSidecar) {
+      responseHeaders['Content-Security-Policy'] = [
+        electronIsDev
+          ? `${common}; script-src ${customScheme}://* 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' devtools://*`
+          : common,
+      ];
+    }
+
+    callback({ responseHeaders });
   });
 }

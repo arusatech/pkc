@@ -5,7 +5,7 @@
  */
 
 import { createWriteStream, existsSync } from 'node:fs';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -45,18 +45,45 @@ type ProgressPayload = {
   percentage: number;
 };
 
+const ACHARYA_FS_CHANNELS = [
+  'acharya-fs:get-root',
+  'acharya-fs:exists',
+  'acharya-fs:stat',
+  'acharya-fs:read-text',
+  'acharya-fs:write-text',
+  'acharya-fs:write-bytes',
+  'acharya-fs:unlink',
+  'acharya-fs:download-url',
+] as const;
+
+function handleIpc(channel: (typeof ACHARYA_FS_CHANNELS)[number], listener: (...args: any[]) => any): void {
+  ipcMain.removeHandler(channel);
+  ipcMain.handle(channel, listener);
+}
+
 export function registerAcharyaFsIpc(): void {
-  ipcMain.handle('acharya-fs:get-root', async () => {
+  handleIpc('acharya-fs:get-root', async () => {
     const root = getAcharyaDownloadsRoot();
     await mkdir(root, { recursive: true });
     return root;
   });
 
-  ipcMain.handle('acharya-fs:exists', async (_event, relativePath: string) => {
+  handleIpc('acharya-fs:exists', async (_event, relativePath: string) => {
     return existsSync(resolveUnderRoot(relativePath));
   });
 
-  ipcMain.handle('acharya-fs:read-text', async (_event, relativePath: string) => {
+  handleIpc('acharya-fs:stat', async (_event, relativePath: string) => {
+    const dest = resolveUnderRoot(relativePath);
+    try {
+      const info = await stat(dest);
+      if (!info.isFile() || info.size <= 0) return null;
+      return { path: dest, sizeBytes: info.size };
+    } catch {
+      return null;
+    }
+  });
+
+  handleIpc('acharya-fs:read-text', async (_event, relativePath: string) => {
     try {
       return await readFile(resolveUnderRoot(relativePath), 'utf8');
     } catch {
@@ -64,20 +91,20 @@ export function registerAcharyaFsIpc(): void {
     }
   });
 
-  ipcMain.handle('acharya-fs:write-text', async (_event, relativePath: string, text: string) => {
+  handleIpc('acharya-fs:write-text', async (_event, relativePath: string, text: string) => {
     const dest = resolveUnderRoot(relativePath);
     await ensureParent(dest);
     await writeFile(dest, text, 'utf8');
   });
 
-  ipcMain.handle('acharya-fs:write-bytes', async (_event, relativePath: string, base64: string) => {
+  handleIpc('acharya-fs:write-bytes', async (_event, relativePath: string, base64: string) => {
     const dest = resolveUnderRoot(relativePath);
     await ensureParent(dest);
     await writeFile(dest, Buffer.from(base64, 'base64'));
     return dest;
   });
 
-  ipcMain.handle('acharya-fs:unlink', async (_event, relativePath: string) => {
+  handleIpc('acharya-fs:unlink', async (_event, relativePath: string) => {
     try {
       await unlink(resolveUnderRoot(relativePath));
     } catch {
@@ -85,7 +112,7 @@ export function registerAcharyaFsIpc(): void {
     }
   });
 
-  ipcMain.handle(
+  handleIpc(
     'acharya-fs:download-url',
     async (
       event: IpcMainInvokeEvent,
@@ -97,6 +124,18 @@ export function registerAcharyaFsIpc(): void {
       }
 
       const dest = resolveUnderRoot(relativePath);
+      if (existsSync(dest)) {
+        const info = await stat(dest);
+        if (info.isFile() && info.size > 0) {
+          event.sender.send('acharya-fs:download-progress', {
+            downloadId,
+            loaded: info.size,
+            total: info.size,
+            percentage: 100,
+          } satisfies ProgressPayload);
+          return { path: dest, sizeBytes: info.size };
+        }
+      }
       await ensureParent(dest);
       const partial = `${dest}.partial`;
 

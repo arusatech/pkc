@@ -12,20 +12,24 @@
   "scripts": {
     "dev": "vite",
     "build:web": "vite build",
-    "build": "npm run build:web && npx cap sync @capacitor-community/electron",
+    "build:llama": "npm run build:js --prefix /Users/annadata/Project_A/llama-cpp-pro",
+    "build:packit": "npm run build --prefix ref-code/pack-it-pkc",
+    "build": "npm run build:llama && npm run build:packit && npm run build:web && npx cap sync @capacitor-community/electron",
     "electron:start": "npm run build && npm --prefix electron run electron:start",
     "electron:start-live": "npm run build && npm --prefix electron run electron:start-live",
     "electron:pack": "npm run build && npm --prefix electron run electron:pack",
     "electron:make": "npm run build && npm --prefix electron run electron:make",
     "cap:add:electron": "npx cap add @capacitor-community/electron",
-    "postinstall": "npm run build --prefix ref-code/pack-it-pkc || true"
+    "postinstall": "npm run build:js --prefix /Users/annadata/Project_A/llama-cpp-pro || true; npm run build --prefix ref-code/pack-it-pkc || true"
   },
   "dependencies": {
     "@annadata/pack-it-pkc": "file:./ref-code/pack-it-pkc",
     "@capacitor-community/electron": "^5.0.1",
     "@capacitor/core": "^6.2.0",
     "buffer": "^6.0.3",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "katex": "^0.17.0",
+    "llama-cpp-pro": "file:///Users/annadata/Project_A/llama-cpp-pro"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.0",

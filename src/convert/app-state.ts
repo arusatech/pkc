@@ -3,6 +3,10 @@ import type {
   GgufInferenceProvider,
   PkcStudyDocument,
 } from "@annadata/pack-it-pkc";
+import {
+  basename as pathBasename,
+  extname,
+} from "@annadata/pack-it-pkc";
 import type { PdfCanvasEditor } from "@annadata/pack-it-pkc/pdf/editor";
 
 export interface ConversionResult {
@@ -42,14 +46,16 @@ export function activeFile(): File | null {
   return state.fileQueue.find((q) => q.id === state.activeFileId)?.file ?? null;
 }
 
-export function extname(filename: string): string {
-  const dot = filename.lastIndexOf(".");
-  return dot > 0 ? filename.slice(dot).toLowerCase() : "";
-}
+export { extname };
 
+/**
+ * Filename stem without extension (for download base names).
+ * Built on pack-it path helpers; not the same as path basename.
+ */
 export function basename(filename: string): string {
-  const dot = filename.lastIndexOf(".");
-  return dot > 0 ? filename.slice(0, dot) : filename;
+  const base = pathBasename(filename);
+  const ext = extname(base);
+  return ext ? base.slice(0, -ext.length) : base;
 }
 
 export function isPdf(file: File): boolean {

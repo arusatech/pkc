@@ -1,4 +1,3 @@
-import { gzipSync, gunzipSync } from "fflate";
 import {
   MarkItDown,
   createEmptyPdfDocumentBlocks,
@@ -12,9 +11,13 @@ import {
   LFM2_CHAT_MODEL_ID,
   DEFAULT_OFFLINE_MODEL_ID,
   packStudyPkc,
-  setActiveModelId,
+  packToPkc,
+  packPkcJson,
+  unpackPkcJson,
   unpackPkc,
+  PKC_MAGIC,
   PKC_STUDY_VERSION,
+  setActiveModelId,
   loadPkcForChat,
   type PdfDocumentBlocks,
 } from "@annadata/pack-it-pkc";
@@ -34,7 +37,6 @@ import { createStudyGame, type StudyGameController } from "../ui/study-game";
 import { initExportModal, type ExportArtifact } from "../ui/export-modal";
 import { initChatPanel } from "../ui/chat-panel";
 
-const PKC_MAGIC = new Uint8Array([0x50, 0x4b, 0x43, 0x01]);
 let detachBlocksSplitter: (() => void) | null = null;
 type PreviewMode = "markdown" | "pkc";
 let previewMode: PreviewMode = "markdown";
@@ -193,42 +195,6 @@ function openStudyPkcExport(): void {
   });
 }
 
-function packToPkcBrowser(
-  markdown: string,
-  meta: { title?: string | null; source?: string },
-): Uint8Array {
-  const doc = {
-    version: 1,
-    title: meta.title ?? null,
-    source: meta.source ?? null,
-    mimetype: "text/markdown",
-    markdown,
-    metadata: {},
-    createdAt: new Date().toISOString(),
-  };
-  return packJsonToPkc(doc);
-}
-
-function packJsonToPkc(doc: unknown): Uint8Array {
-  const json = new TextEncoder().encode(JSON.stringify(doc));
-  const compressed = gzipSync(json);
-  const out = new Uint8Array(PKC_MAGIC.length + 4 + compressed.length);
-  out.set(PKC_MAGIC, 0);
-  new DataView(out.buffer).setUint32(PKC_MAGIC.length, compressed.length, false);
-  out.set(compressed, PKC_MAGIC.length + 4);
-  return out;
-}
-
-function unpackPkcJson(data: Uint8Array): unknown {
-  if (data.length < PKC_MAGIC.length + 4) throw new Error("Invalid PKC: too short");
-  for (let i = 0; i < PKC_MAGIC.length; i++) {
-    if (data[i] !== PKC_MAGIC[i]) throw new Error("Invalid PKC magic header");
-  }
-  const payloadLen = new DataView(data.buffer, data.byteOffset).getUint32(PKC_MAGIC.length, false);
-  const payload = data.subarray(PKC_MAGIC.length + 4, PKC_MAGIC.length + 4 + payloadLen);
-  return JSON.parse(new TextDecoder().decode(gunzipSync(payload)));
-}
-
 function hasPkcPreview(): boolean {
   return !!(state.lastStudyDoc || state.lastStudyPkc || state.lastPkc || state.lastResult);
 }
@@ -309,7 +275,7 @@ function refreshPreviewEditor(): void {
 
 function persistStudyDoc(doc: NonNullable<typeof state.lastStudyDoc>): void {
   state.lastStudyDoc = doc;
-  state.lastStudyPkc = packJsonToPkc(doc);
+  state.lastStudyPkc = packStudyPkc(doc);
   if (typeof doc.markdown === "string" && state.lastResult) {
     state.lastResult = { ...state.lastResult, markdown: doc.markdown };
   }
@@ -324,7 +290,7 @@ function applyMarkdownEdit(text: string): void {
   if (!state.lastResult) return;
   state.lastResult = { ...state.lastResult, markdown: text };
   if (els.pkcToggle.checked) {
-    state.lastPkc = packToPkcBrowser(text, {
+    state.lastPkc = packToPkc(text, {
       title: state.lastResult.title,
       source: activeFile()?.name,
     });
@@ -345,7 +311,7 @@ function applyPkcJsonEdit(text: string): void {
   // Study PKC documents use version 2.
   if (version === 2 || state.lastStudyDoc || state.lastStudyPkc) {
     state.lastStudyDoc = parsed as unknown as NonNullable<typeof state.lastStudyDoc>;
-    state.lastStudyPkc = packJsonToPkc(parsed);
+    state.lastStudyPkc = packPkcJson(parsed);
     if (typeof parsed.markdown === "string" && state.lastResult) {
       state.lastResult = { ...state.lastResult, markdown: parsed.markdown };
     }
@@ -359,7 +325,7 @@ function applyPkcJsonEdit(text: string): void {
         title: (parsed.title as string | null | undefined) ?? state.lastResult.title,
       };
     }
-    state.lastPkc = packJsonToPkc(parsed);
+    state.lastPkc = packPkcJson(parsed);
     setStatus("PKC JSON updated", "ok");
   }
   updateDownloadButtons();
@@ -481,7 +447,7 @@ function applyResult(
   const baseName = basename(file.name);
   state.lastResult = { markdown, title, baseName, pdfBlocks };
   state.lastPkc = els.pkcToggle.checked
-    ? packToPkcBrowser(markdown, { title, source: file.name })
+    ? packToPkc(markdown, { title, source: file.name })
     : null;
   state.lastStudyPkc = null;
   state.lastStudyDoc = null;
@@ -956,7 +922,7 @@ export function wireConvertUi(): void {
     state.packPkcOnProcess = els.pkcToggle.checked;
     if (state.lastResult) {
       state.lastPkc = els.pkcToggle.checked
-        ? packToPkcBrowser(state.lastResult.markdown, {
+        ? packToPkc(state.lastResult.markdown, {
             title: state.lastResult.title,
             source: activeFile()?.name,
           })

@@ -1,5 +1,5 @@
 import type { FlashCard, Mcq, PkcStudyDocument } from "@annadata/pack-it-pkc";
-import { formatStudyHtml } from "./study-katex";
+import { formatStudyHtml } from "@annadata/pack-it-pkc";
 
 export type StudyQuizKind = "flash" | "mcq";
 

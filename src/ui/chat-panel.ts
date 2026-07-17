@@ -1,12 +1,12 @@
 import {
   answerStudyQuestion,
+  formatStudyHtml,
   getActiveModelId,
   loadPkcForChat,
   type PkcStudyDocument,
   type StudyChatImage,
 } from "@annadata/pack-it-pkc";
 import { state } from "../convert/app-state";
-import { formatStudyHtml } from "./study-katex";
 import type { StudyQuizController } from "./study-quiz";
 import type { StudyGameController } from "./study-game";
 

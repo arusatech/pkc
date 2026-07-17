@@ -1,13 +1,8 @@
 /**
  * PKC electron-builder config — merges llama-cpp-pro desktop sidecar + wasm
- * extraResources from the co-developed plugin tree.
+ * extraResources from the installed (or file-linked) plugin package.
  */
-const path = require('node:path');
-
-const LLAMA_CPP_PRO_ROOT = '/Users/annadata/Project_A/llama-cpp-pro';
-
-// eslint-disable-next-line import/no-dynamic-require
-const llamaDesktop = require(path.join(LLAMA_CPP_PRO_ROOT, 'desktop/electron-builder.config.cjs'));
+const llamaDesktop = require('llama-cpp-pro/desktop/electron-builder');
 
 const base = {
   appId: 'ai.annadata.pkc',
@@ -37,4 +32,4 @@ const base = {
   },
 };
 
-module.exports = llamaDesktop.merge(base, { packageRoot: LLAMA_CPP_PRO_ROOT });
+module.exports = llamaDesktop.merge(base);

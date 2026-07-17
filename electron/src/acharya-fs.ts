@@ -124,7 +124,9 @@ export function registerAcharyaFsIpc(): void {
       }
 
       const dest = resolveUnderRoot(relativePath);
-      if (existsSync(dest)) {
+      // The file may vanish between existsSync() and stat(); tolerate any stat failure
+      // and fall through to re-download instead of crashing the IPC handler.
+      try {
         const info = await stat(dest);
         if (info.isFile() && info.size > 0) {
           event.sender.send('acharya-fs:download-progress', {
@@ -135,6 +137,8 @@ export function registerAcharyaFsIpc(): void {
           } satisfies ProgressPayload);
           return { path: dest, sizeBytes: info.size };
         }
+      } catch {
+        /* not present or unreadable — download it below */
       }
       await ensureParent(dest);
       const partial = `${dest}.partial`;

@@ -24,7 +24,7 @@
     "electron-unhandled": "~4.0.1",
     "electron-updater": "^5.3.0",
     "electron-window-state": "^5.0.3",
-    "llama-cpp-pro": "file:///Users/annadata/Project_A/llama-cpp-pro"
+    "llama-cpp-pro": "file:../../llama-cpp-pro"
   },
   "devDependencies": {
     "electron": "^26.6.10",

@@ -274,10 +274,12 @@ export function setupContentSecurityPolicy(customScheme: string): void {
     }
 
     // Sidecar currently sends Access-Control-Allow-Origin twice (default headers + set_cors) → "*, *".
-    // Browsers reject that; keep a single value for localhost responses.
+    // Browsers reject that; keep a single value for its responses.
+    // The llama-cpp-pro sidecar binds to the loopback IP (127.0.0.1 / [::1]) on a random
+    // port, never to the "localhost" hostname. Matching "localhost:*" here would wrongly
+    // classify the Vite dev server (http://localhost:5173) as the sidecar and skip CSP for it.
     const isLocalSidecar =
       details.url.startsWith('http://127.0.0.1:') ||
-      details.url.startsWith('http://localhost:') ||
       details.url.startsWith('http://[::1]:');
     if (isLocalSidecar) {
       for (const name of Object.keys(responseHeaders)) {

@@ -635,6 +635,68 @@ body.blocks-splitter-active img {
   display: none !important;
 }
 
+.study-game {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.study-game-overlay:not([hidden]) {
+  position: fixed;
+  z-index: 50;
+  inset: 4vh auto auto 50%;
+  transform: translateX(-50%);
+  width: min(560px, 94vw);
+  height: min(720px, 92vh);
+  max-height: 92vh;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.study-game[hidden] {
+  display: none !important;
+}
+
+.study-game-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.study-game-title {
+  font-weight: 650;
+  font-size: 0.95rem;
+  flex: 1;
+}
+
+.study-game-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.study-game-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: none;
+  background: #12141a;
+}
+
+.study-game-fallback {
+  margin: 16px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .panel-chat {
   display: flex;
   flex-direction: column;
@@ -712,6 +774,7 @@ body.blocks-splitter-active img {
   font-size: 0.88rem;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -725,6 +788,55 @@ body.blocks-splitter-active img {
   align-self: flex-start;
   background: var(--panel);
   border: 1px solid var(--border);
+  /* HTML + KaTeX — let the bubble wrap normally inside the chat pane */
+  white-space: normal;
+  max-width: min(100%, 520px);
+}
+
+.chat-bubble-assistant .katex {
+  font-size: 1.05em;
+}
+
+.chat-bubble-assistant .katex-display {
+  display: block;
+  margin: 0.45em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+
+.chat-bubble-assistant .katex-html {
+  max-width: 100%;
+}
+
+.chat-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-figure {
+  margin: 0;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 40%, var(--panel));
+}
+
+.chat-figure img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.chat-fig-caption {
+  padding: 6px 8px;
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 .chat-bubble-system {

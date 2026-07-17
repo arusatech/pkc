@@ -3,15 +3,40 @@ import {
   getActiveModelId,
   loadPkcForChat,
   type PkcStudyDocument,
+  type StudyChatImage,
 } from "@annadata/pack-it-pkc";
 import { state } from "../convert/app-state";
 import { formatStudyHtml } from "./study-katex";
 import type { StudyQuizController } from "./study-quiz";
+import type { StudyGameController } from "./study-game";
 
 type ChatRole = "user" | "assistant" | "system";
 
+function renderAssistantHtml(text: string, images?: StudyChatImage[]): string {
+  const body = formatStudyHtml(text);
+  if (!images?.length) return body;
+  const figs = images
+    .map((img) => {
+      const caption = img.caption
+        ? `<figcaption class="chat-fig-caption">${escapeAttr(img.caption)}</figcaption>`
+        : "";
+      return `<figure class="chat-figure"><img src="${escapeAttr(img.src)}" alt="${escapeAttr(img.caption || "Figure")}" loading="lazy" />${caption}</figure>`;
+    })
+    .join("");
+  return `${body}<div class="chat-figures">${figs}</div>`;
+}
+
+function escapeAttr(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export function initChatPanel(opts: {
   getStudyQuiz: () => StudyQuizController | null;
+  getStudyGame: () => StudyGameController | null;
   onStatus: (msg: string, kind?: "ok" | "err") => void;
   onImported: (doc: PkcStudyDocument) => void;
 }): void {
@@ -21,6 +46,7 @@ export function initChatPanel(opts: {
   const studyActions = document.getElementById("chat-study-actions")!;
   const flashBtn = document.getElementById("chat-flash-btn") as HTMLButtonElement;
   const mcqBtn = document.getElementById("chat-mcq-btn") as HTMLButtonElement;
+  const playBtn = document.getElementById("chat-play-btn") as HTMLButtonElement;
   const messagesEl = document.getElementById("chat-messages")!;
   const emptyEl = document.getElementById("chat-empty")!;
   const input = document.getElementById("chat-input") as HTMLTextAreaElement;
@@ -31,9 +57,11 @@ export function initChatPanel(opts: {
   function syncStudyActions(): void {
     const doc = state.chatStudyDoc;
     const hasDoc = !!doc;
+    const gameCount = doc?.games?.length ?? doc?.stats.gameCount ?? 0;
     studyActions.hidden = !hasDoc;
     flashBtn.disabled = !hasDoc || (doc?.flashCards.length ?? 0) === 0;
     mcqBtn.disabled = !hasDoc || (doc?.mcqs.length ?? 0) === 0;
+    playBtn.disabled = !hasDoc || gameCount === 0;
     input.disabled = !hasDoc || sending;
     sendBtn.disabled = !hasDoc || sending || !input.value.trim();
     if (hasDoc && state.chatPkcName) {
@@ -43,14 +71,19 @@ export function initChatPanel(opts: {
       nameEl.hidden = true;
       nameEl.textContent = "";
     }
+    opts.getStudyGame()?.syncActionButtons();
   }
 
-  function appendMessage(role: ChatRole, text: string): HTMLElement {
+  function appendMessage(
+    role: ChatRole,
+    text: string,
+    images?: StudyChatImage[],
+  ): HTMLElement {
     emptyEl.hidden = true;
     const row = document.createElement("div");
     row.className = `chat-bubble chat-bubble-${role}`;
     if (role === "assistant") {
-      row.innerHTML = formatStudyHtml(text);
+      row.innerHTML = renderAssistantHtml(text, images);
     } else {
       row.textContent = text;
     }
@@ -76,15 +109,21 @@ export function initChatPanel(opts: {
       opts.onImported(doc);
       syncStudyActions();
       resetThread();
+      const gameCount = doc.stats.gameCount ?? doc.games?.length ?? 0;
       const isPlain =
         doc.stats.flashCardCount === 0 &&
         doc.stats.mcqCount === 0 &&
+        gameCount === 0 &&
         (doc.warnings?.some((w) => w.includes("plain PKC")) ?? false);
+      const imageCount = (doc.blocks ?? []).filter(
+        (b) => b.kind === "image" && b.dataUrl?.startsWith("data:image/"),
+      ).length;
+      const gameBit = gameCount > 0 ? ` · ${gameCount} game${gameCount === 1 ? "" : "s"}` : "";
       appendMessage(
         "system",
         isPlain
           ? `Loaded “${file.name}” (plain PKC) · ${doc.stats.chunkCount} text chunks · chat ready`
-          : `Loaded “${file.name}” · ${doc.stats.flashCardCount} flash · ${doc.stats.mcqCount} MCQ · ${doc.stats.chunkCount} chunks`,
+          : `Loaded “${file.name}” · ${doc.stats.flashCardCount} flash · ${doc.stats.mcqCount} MCQ${gameBit} · ${doc.stats.chunkCount} chunks${imageCount ? ` · ${imageCount} figures` : ""}`,
       );
       opts.onStatus(`Chat PKC loaded: ${file.name}`, "ok");
     } catch (err) {
@@ -114,7 +153,7 @@ export function initChatPanel(opts: {
         chatModelId: getActiveModelId(),
         onStatus: (msg) => opts.onStatus(msg),
       });
-      pending.innerHTML = formatStudyHtml(result.text);
+      pending.innerHTML = renderAssistantHtml(result.text, result.images);
     } catch (err) {
       pending.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
@@ -133,6 +172,7 @@ export function initChatPanel(opts: {
 
   flashBtn.addEventListener("click", () => opts.getStudyQuiz()?.open("flash", "chat"));
   mcqBtn.addEventListener("click", () => opts.getStudyQuiz()?.open("mcq", "chat"));
+  playBtn.addEventListener("click", () => opts.getStudyGame()?.open("chat"));
 
   sendBtn.addEventListener("click", () => void send());
   input.addEventListener("input", () => {

@@ -9,34 +9,37 @@ When reading, comparing, or copying from these codebases, use the **canonical** 
 
 | Name | Canonical path | Notes |
 |------|----------------|--------|
-| **llama-cpp-pro** (npm: `llama-cpp-pro`) | `/Users/annadata/Project_A/llama-cpp-pro` | Capacitor llama.cpp plugin (`initLlama`, WASM, desktop sidecar). |
+| **llama-cpp-pro** (npm: `llama-cpp-pro`) | Sibling checkout: `../llama-cpp-pro` (or `LLAMA_CPP_PRO_ROOT`) | Capacitor llama.cpp plugin (`initLlama`, WASM, desktop sidecar). |
 | **annadata-app** | `/Users/annadata/Project_A/annadata-app` | Annadata mobile/app product; reuse patterns (OCR, Study PKC, downloads, llama usage). |
 
 ## llama-cpp-pro: local file dependency is temporary
 
-**Current phase (development / stabilizing):** PKC and `llama-cpp-pro` are co-developed. PKC wires the plugin via a **local absolute path** so changes land immediately:
+**Current phase (development / stabilizing):** PKC and `llama-cpp-pro` are co-developed. PKC wires the plugin via a **relative file dependency** so changes land immediately on any machine:
 
 - Do **not** put `llama-cpp-pro` under `ref-code/` (no soft links, no copies).
-- Host/`electron`: `"llama-cpp-pro": "file:///Users/annadata/Project_A/llama-cpp-pro"`
-- `npm run build:llama` → `npm run build:js --prefix /Users/annadata/Project_A/llama-cpp-pro`
-- Vite alias → `/Users/annadata/Project_A/llama-cpp-pro/dist/esm/index.js`
-- Prefer fixing bugs/features in `/Users/annadata/Project_A/llama-cpp-pro`, then rebuild.
-- **Desktop Electron (this machine):** after `npm run build:sidecar && npm run stage:desktop` (+ `verify:desktop:bundle`), PKC uses:
-  - Main: `electron/src/llama-desktop.ts` → `resourcesPath` = `…/extraResources` (dev) or `process.resourcesPath` (packaged)
+- Host/`electron`: `"llama-cpp-pro": "file:../llama-cpp-pro"` (root) / `"file:../../llama-cpp-pro"` (electron subpackage)
+- `npm run build:llama` → `npm run build:js --prefix ./node_modules/llama-cpp-pro`
+- Vite resolves `llama-cpp-pro` via `require.resolve('llama-cpp-pro/package.json')` (see `vite.config.ts`)
+- Path helpers live in **llama-cpp-pro**: `desktop/resolve-package-root.cjs` (`getResourcesPathForApp`, `assertSidecarBinary`, …)
+- Prefer fixing bugs/features in the sibling `llama-cpp-pro` tree, then rebuild.
+- **Desktop Electron:** after `npm run build:sidecar && npm run stage:desktop` (+ `verify:desktop:bundle`) in llama-cpp-pro, PKC uses:
+  - Main: thin `electron/src/llama-desktop.ts` → `llama-cpp-pro/desktop`
   - Preload: `llama-cpp-pro/desktop/preload`
-  - Packaged apps: `electron/electron-builder.config.cjs` merges sidecar + wasm extraResources from the plugin tree
+  - Packaged apps: `electron/electron-builder.config.cjs` → `require('llama-cpp-pro/desktop/electron-builder')`
   - Expected binaries: `extraResources/sidecar/darwin-arm64` and `darwin-x64`
 
-**After stable:** publish `/Users/annadata/Project_A/llama-cpp-pro` to **npmjs** as `llama-cpp-pro`, then switch PKC (and electron) to a normal registry install, e.g.:
+**Non-standard layout:** set `LLAMA_CPP_PRO_ROOT` to an absolute path before build/run.
+
+**After stable:** publish `llama-cpp-pro` to **npmjs**, then switch PKC (and electron) to a normal registry install, e.g.:
 
 ```bash
 npm uninstall llama-cpp-pro
 npm install llama-cpp-pro
 ```
 
-Remove the local `file:///` dep, Vite hard alias to the sibling tree, and `build:llama` / postinstall prefix builds that target the filesystem path — consumers should use the published package like any other plugin.
+Remove the local `file:` dep, Vite alias, and postinstall prefix builds — consumers should use the published package like any other plugin.
 
-Until that cutover, keep using the local hard path for development only.
+Until that cutover, keep the sibling `file:../llama-cpp-pro` link for co-development.
 
 ## annadata-app
 

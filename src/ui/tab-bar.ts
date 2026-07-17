@@ -36,6 +36,8 @@ export function enterWorkMode(opts: { pdf: boolean }): void {
   visible.preview = true;
   // Keep chat as-is if user already had it open
   applyFn?.();
+  // Ensure layout is computed before PdfCanvasEditor measures width.
+  requestAnimationFrame(() => syncPanelRowSplitters());
 }
 
 /** When the queue is empty: return to the Upload picker. */
@@ -81,6 +83,16 @@ export function initTabBar(): {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".tab-btn");
     if (!btn?.dataset.panel) return;
     const id = btn.dataset.panel as PanelId;
+
+    // "+" Upload always opens the file picker (and keeps the drop zone visible).
+    if (id === "upload") {
+      visible.upload = true;
+      apply();
+      const input = document.getElementById("file-input") as HTMLInputElement | null;
+      input?.click();
+      return;
+    }
+
     visible[id] = !visible[id];
     apply();
   });

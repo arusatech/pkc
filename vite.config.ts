@@ -1,9 +1,21 @@
 import { defineConfig } from "vite";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const stubs = resolve(root, "src/stubs");
+const require = createRequire(import.meta.url);
+
+function resolveLlamaEsmEntry(): string {
+  try {
+    const pkgJson = require.resolve("llama-cpp-pro/package.json");
+    return resolve(dirname(pkgJson), "dist/esm/index.js");
+  } catch {
+    // Before first npm install; sibling checkout (../llama-cpp-pro).
+    return resolve(root, "..", "llama-cpp-pro", "dist/esm/index.js");
+  }
+}
 
 export default defineConfig({
   root,
@@ -15,8 +27,7 @@ export default defineConfig({
   server: { port: 5173, open: true },
   resolve: {
     alias: {
-      // Canonical sibling package (not under ref-code/).
-      "llama-cpp-pro": "/Users/annadata/Project_A/llama-cpp-pro/dist/esm/index.js",
+      "llama-cpp-pro": resolveLlamaEsmEntry(),
       "node:fs/promises": resolve(stubs, "fs-promises.ts"),
       "fs/promises": resolve(stubs, "fs-promises.ts"),
       "node:fs": resolve(stubs, "fs.ts"),

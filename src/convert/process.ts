@@ -30,6 +30,7 @@ import {
 import { attachBlocksSplitter } from "../ui/blocks-splitter";
 import { enterPickMode, enterWorkMode } from "../ui/tab-bar";
 import { createStudyQuiz, type StudyQuizController } from "../ui/study-quiz";
+import { createStudyGame, type StudyGameController } from "../ui/study-game";
 import { initExportModal, type ExportArtifact } from "../ui/export-modal";
 import { initChatPanel } from "../ui/chat-panel";
 
@@ -39,7 +40,36 @@ type PreviewMode = "markdown" | "pkc";
 let previewMode: PreviewMode = "markdown";
 let previewEditTimer: ReturnType<typeof setTimeout> | null = null;
 let studyQuiz: StudyQuizController | null = null;
+let studyGame: StudyGameController | null = null;
 let openExport: ((artifact: ExportArtifact) => void) | null = null;
+
+function studySummaryBits(study: {
+  stats: {
+    flashCardCount: number;
+    mcqCount: number;
+    gameCount?: number;
+  };
+}): string {
+  const games = study.stats.gameCount ?? 0;
+  const parts = [
+    `${study.stats.flashCardCount} flash`,
+    `${study.stats.mcqCount} MCQ`,
+  ];
+  if (games > 0) parts.push(`${games} game${games === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
+function syncStudyUi(): void {
+  studyQuiz?.syncActionButtons();
+  studyGame?.syncActionButtons();
+}
+
+function closeStudyOverlays(): void {
+  studyQuiz?.close();
+  studyGame?.close();
+}
+/** Bumped on each enqueue/switch so in-flight process runs can abort cleanly. */
+let processGeneration = 0;
 
 function looksLikePkcMagic(bytes: Uint8Array): boolean {
   if (bytes.length < PKC_MAGIC.length) return false;
@@ -149,7 +179,7 @@ export function updateDownloadButtons(): void {
   els.studyExportBtn.disabled = !state.lastStudyPkc || state.generatingStudyPkc;
   els.previewModePkc.disabled = (!hasPkcPreview() && !canGenerateStudy) || state.generatingStudyPkc;
   els.previewModePkc.textContent = state.generatingStudyPkc ? "PKC…" : "PKC";
-  studyQuiz?.syncActionButtons();
+  syncStudyUi();
 }
 
 function openStudyPkcExport(): void {
@@ -237,13 +267,13 @@ function setPreviewMode(mode: PreviewMode): void {
   els.previewModePkc.classList.toggle("active", mode === "pkc");
   els.previewModeMd.setAttribute("aria-pressed", String(mode === "markdown"));
   els.previewModePkc.setAttribute("aria-pressed", String(mode === "pkc"));
-  studyQuiz?.close();
+  closeStudyOverlays();
   refreshPreviewEditor();
 }
 
 function refreshPreviewEditor(): void {
   const hasResult = !!state.lastResult;
-  studyQuiz?.syncActionButtons();
+  syncStudyUi();
 
   if (!hasResult) {
     els.previewEditor.hidden = true;
@@ -254,7 +284,7 @@ function refreshPreviewEditor(): void {
   }
 
   els.previewEmpty.hidden = true;
-  if (studyQuiz?.isOpen()) {
+  if (studyQuiz?.isOpen() || studyGame?.isOpen()) {
     els.previewEditor.hidden = true;
   } else {
     els.previewEditor.hidden = false;
@@ -283,7 +313,7 @@ function persistStudyDoc(doc: NonNullable<typeof state.lastStudyDoc>): void {
   if (typeof doc.markdown === "string" && state.lastResult) {
     state.lastResult = { ...state.lastResult, markdown: doc.markdown };
   }
-  studyQuiz?.syncActionButtons();
+  syncStudyUi();
   updateDownloadButtons();
   // Always refresh the PKC JSON buffer (even while the quiz overlay is open).
   refreshPreviewEditor();
@@ -377,7 +407,6 @@ async function downloadBlob(blob: Blob, filename: string): Promise<string> {
 }
 
 export function refreshFileSelect(): void {
-  const prev = els.fileSelect.value;
   els.fileSelect.innerHTML = "";
 
   if (state.fileQueue.length === 0) {
@@ -401,16 +430,13 @@ export function refreshFileSelect(): void {
     els.fileSelect.append(opt);
   }
 
+  // Honor intentional activeFileId (e.g. newly uploaded file). Do not restore a
+  // stale <select> value — that skipped opening the PDF the user just picked.
   if (state.activeFileId && state.fileQueue.some((q) => q.id === state.activeFileId)) {
     els.fileSelect.value = state.activeFileId;
   } else {
     state.activeFileId = state.fileQueue[0]!.id;
     els.fileSelect.value = state.activeFileId;
-  }
-
-  if (prev && state.fileQueue.some((q) => q.id === prev)) {
-    els.fileSelect.value = prev;
-    state.activeFileId = prev;
   }
 }
 
@@ -431,7 +457,7 @@ function resetOutput(): void {
   state.lastStudyDoc = null;
   state.selectedBytes = null;
   previewMode = "markdown";
-  studyQuiz?.close();
+  closeStudyOverlays();
   els.previewEditor.value = "";
   els.previewEditor.hidden = true;
   els.previewEmpty.hidden = false;
@@ -440,7 +466,7 @@ function resetOutput(): void {
   els.studyStatusBar.hidden = true;
   els.studyPkcStatus.textContent = "";
   setPreviewMode("markdown");
-  studyQuiz?.syncActionButtons();
+  syncStudyUi();
   updateDownloadButtons();
 }
 
@@ -463,7 +489,7 @@ function applyResult(
   els.studyPkcSummary.textContent = "";
   els.studyStatusBar.hidden = true;
   els.studyPkcStatus.textContent = "";
-  studyQuiz?.close();
+  closeStudyOverlays();
   setPreviewMode("markdown");
   updateDownloadButtons();
 }
@@ -488,9 +514,9 @@ function applyImportedPkc(bytes: Uint8Array): void {
     state.lastStudyDoc = study;
     state.lastStudyPkc = bytes;
     els.studyStatusBar.hidden = false;
-    els.studyPkcStatus.textContent = `Study PKC ready · ${study.stats.flashCardCount} flash · ${study.stats.mcqCount} MCQ`;
+    els.studyPkcStatus.textContent = `Study PKC ready · ${studySummaryBits(study)}`;
     els.studyPkcSummary.hidden = true;
-    studyQuiz?.syncActionButtons();
+    syncStudyUi();
     setPreviewMode("markdown");
     updateDownloadButtons();
     return;
@@ -511,7 +537,7 @@ function applyImportedPkc(bytes: Uint8Array): void {
   els.studyStatusBar.hidden = true;
   els.studyPkcStatus.textContent = "";
   els.studyPkcSummary.hidden = true;
-  studyQuiz?.close();
+  closeStudyOverlays();
   setPreviewMode("markdown");
   updateDownloadButtons();
 }
@@ -549,14 +575,16 @@ function mountPdfEditor(
 
 export async function runProcess(): Promise<void> {
   const file = activeFile();
-  if (!file || state.processing) return;
+  if (!file) return;
 
+  const gen = ++processGeneration;
   state.processing = true;
   setStatus("Processing…");
   destroyEditor();
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
+    if (gen !== processGeneration) return;
     state.selectedBytes = bytes;
     const extension = extname(file.name);
 
@@ -565,6 +593,7 @@ export async function runProcess(): Promise<void> {
       // Fresh canvas every open: no auto-extracted blocks, no stale localStorage tags.
       clearPdfBlocksLocal(file.name);
       const doc = await createEmptyPdfDocumentBlocks(bytes);
+      if (gen !== processGeneration) return;
 
       mountPdfEditor(bytes, doc, doc.title ?? null);
       const title = doc.title ? ` — ${doc.title}` : "";
@@ -578,10 +607,11 @@ export async function runProcess(): Promise<void> {
     if (isPkcFile(file) || looksLikePkcMagic(bytes)) {
       setStatus("Opening PKC…");
       applyImportedPkc(bytes);
+      if (gen !== processGeneration) return;
       const study = state.lastStudyDoc;
       if (study) {
         setStatus(
-          `Loaded Study PKC · ${study.stats.flashCardCount} flash · ${study.stats.mcqCount} MCQ · ${(state.lastResult?.markdown.length ?? 0).toLocaleString()} chars`,
+          `Loaded Study PKC · ${studySummaryBits(study)} · ${(state.lastResult?.markdown.length ?? 0).toLocaleString()} chars`,
           "ok",
         );
       } else {
@@ -599,16 +629,20 @@ export async function runProcess(): Promise<void> {
       filename: file.name,
       mimetype: file.type || null,
     });
+    if (gen !== processGeneration) return;
     applyResult(result.markdown, result.title, result.pdfBlocks);
     const title = result.title ? ` — ${result.title}` : "";
     setStatus(`Done${title} (${result.markdown.length.toLocaleString()} chars)`, "ok");
   } catch (err) {
+    if (gen !== processGeneration) return;
     const message = err instanceof Error ? err.message : String(err);
     setStatus(`Failed: ${message}`, "err");
     resetOutput();
   } finally {
-    state.processing = false;
-    refreshFileSelect();
+    if (gen === processGeneration) {
+      state.processing = false;
+      refreshFileSelect();
+    }
   }
 }
 
@@ -655,6 +689,7 @@ async function handlePkcButton(): Promise<void> {
       canGenerate &&
       previewMode === "pkc" &&
       !studyQuiz?.isOpen() &&
+      !studyGame?.isOpen() &&
       window.confirm(
         "Regenerate Study PKC from the document?\n\nThis replaces the current flash cards and MCQs (including any edits).",
       );
@@ -662,7 +697,7 @@ async function handlePkcButton(): Promise<void> {
       await handleGenerateStudyPkc();
       return;
     }
-    studyQuiz?.close();
+    closeStudyOverlays();
     setPreviewMode("pkc");
     return;
   }
@@ -685,7 +720,7 @@ async function handleGenerateStudyPkc(): Promise<void> {
   els.studyStatusBar.hidden = false;
   els.studyPkcStatus.textContent = "Generating study PKC…";
   els.studyPkcSummary.hidden = true;
-  studyQuiz?.close();
+  closeStudyOverlays();
 
   try {
     const result = await generateStudyPkc(doc, {
@@ -708,6 +743,7 @@ async function handleGenerateStudyPkc(): Promise<void> {
       `chunks: ${stats.chunkCount} (embedded: ${stats.embeddedChunkCount})`,
       `flashcards: ${stats.flashCardCount}`,
       `mcqs: ${stats.mcqCount}`,
+      `games: ${stats.gameCount}`,
       `models: embedding=${models.embedding ?? "—"} chat=${models.chat ?? "—"}`,
     ];
     if (warnings?.length) {
@@ -726,10 +762,10 @@ async function handleGenerateStudyPkc(): Promise<void> {
     els.studyPkcStatus.textContent = result.warnings.length
       ? `Study PKC ready with ${result.warnings.length} warning(s)`
       : "Study PKC ready";
-    studyQuiz?.syncActionButtons();
+    syncStudyUi();
     setPreviewMode("pkc");
     setStatus(
-      `Study PKC · ${stats.flashCardCount} flash · ${stats.mcqCount} MCQ · ${stats.embeddedChunkCount}/${stats.chunkCount} embedded`,
+      `Study PKC · ${studySummaryBits(result.document)} · ${stats.embeddedChunkCount}/${stats.chunkCount} embedded`,
       "ok",
     );
   } catch (err) {
@@ -738,7 +774,7 @@ async function handleGenerateStudyPkc(): Promise<void> {
     els.studyPkcSummary.hidden = true;
     els.studyStatusBar.hidden = false;
     els.studyPkcStatus.textContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
-    studyQuiz?.syncActionButtons();
+    syncStudyUi();
     setStatus(`Study PKC failed: ${err instanceof Error ? err.message : String(err)}`, "err");
   } finally {
     state.generatingStudyPkc = false;
@@ -954,6 +990,22 @@ export async function initConvert(): Promise<void> {
       persistStudyDoc(doc);
     },
     onOpen: () => {
+      studyGame?.close();
+      els.previewEditor.hidden = true;
+      els.previewEmpty.hidden = true;
+      els.previewModeMd.classList.remove("active");
+      els.previewModePkc.classList.remove("active");
+    },
+    onClose: () => {
+      refreshPreviewEditor();
+      els.previewModeMd.classList.toggle("active", previewMode === "markdown");
+      els.previewModePkc.classList.toggle("active", previewMode === "pkc");
+    },
+  });
+  studyGame = createStudyGame({
+    getDoc: (source) => (source === "chat" ? state.chatStudyDoc : state.lastStudyDoc),
+    onOpen: () => {
+      studyQuiz?.close();
       els.previewEditor.hidden = true;
       els.previewEmpty.hidden = true;
       els.previewModeMd.classList.remove("active");
@@ -967,9 +1019,10 @@ export async function initConvert(): Promise<void> {
   });
   initChatPanel({
     getStudyQuiz: () => studyQuiz,
+    getStudyGame: () => studyGame,
     onStatus: (msg, kind) => setStatus(msg, kind),
     onImported: () => {
-      studyQuiz?.syncActionButtons();
+      syncStudyUi();
     },
   });
   wireConvertUi();

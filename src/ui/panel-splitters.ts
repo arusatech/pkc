@@ -1,4 +1,4 @@
-export type PanelId = "upload" | "blocks" | "preview" | "chat";
+export type PanelId = "upload" | "merge" | "blocks" | "preview" | "chat";
 
 const STORAGE_KEY = "pkc:panel-widths";
 const MIN_PCT = 12;

@@ -6,6 +6,7 @@ const STORAGE_KEY = "pkc:visible-panels";
 
 const DEFAULT_VISIBLE: Record<PanelId, boolean> = {
   upload: true,
+  merge: false,
   blocks: false,
   preview: false,
   chat: false,
@@ -29,9 +30,10 @@ function saveVisible(state: Record<PanelId, boolean>): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-/** After a file is picked: hide Upload and open work panes. */
+/** After a file is picked: hide Upload/Merge and open work panes. */
 export function enterWorkMode(opts: { pdf: boolean }): void {
   visible.upload = false;
+  visible.merge = false;
   visible.blocks = opts.pdf;
   visible.preview = true;
   // Keep chat as-is if user already had it open
@@ -43,6 +45,17 @@ export function enterWorkMode(opts: { pdf: boolean }): void {
 /** When the queue is empty: return to the Upload picker. */
 export function enterPickMode(): void {
   visible.upload = true;
+  visible.merge = false;
+  visible.blocks = false;
+  visible.preview = false;
+  visible.chat = false;
+  applyFn?.();
+}
+
+/** Open the Merge staging panel (hide other pickers). */
+export function enterMergeMode(): void {
+  visible.upload = false;
+  visible.merge = true;
   visible.blocks = false;
   visible.preview = false;
   visible.chat = false;
@@ -67,7 +80,8 @@ export function initTabBar(): {
     }
 
     for (const btn of tabBar.querySelectorAll<HTMLButtonElement>(".tab-btn")) {
-      const id = btn.dataset.panel as PanelId;
+      const id = btn.dataset.panel as PanelId | undefined;
+      if (!id) continue;
       const on = !!visible[id];
       btn.classList.toggle("active", on);
       btn.setAttribute("aria-pressed", String(on));
@@ -87,9 +101,21 @@ export function initTabBar(): {
     // "+" Upload always opens the file picker (and keeps the drop zone visible).
     if (id === "upload") {
       visible.upload = true;
+      visible.merge = false;
       apply();
       const input = document.getElementById("file-input") as HTMLInputElement | null;
       input?.click();
+      return;
+    }
+
+    // Merge tab opens the merge staging panel (does not toggle off if already open).
+    if (id === "merge") {
+      visible.upload = false;
+      visible.merge = true;
+      visible.blocks = false;
+      visible.preview = false;
+      visible.chat = false;
+      apply();
       return;
     }
 

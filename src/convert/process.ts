@@ -36,6 +36,7 @@ import { createStudyQuiz, type StudyQuizController } from "../ui/study-quiz";
 import { createStudyGame, type StudyGameController } from "../ui/study-game";
 import { initExportModal, type ExportArtifact } from "../ui/export-modal";
 import { initChatPanel } from "../ui/chat-panel";
+import { initMergePanel } from "../ui/merge-panel";
 
 let detachBlocksSplitter: (() => void) | null = null;
 type PreviewMode = "markdown" | "pkc";
@@ -852,6 +853,14 @@ export function wireConvertUi(): void {
   els.fileInput.addEventListener("change", () => {
     if (els.fileInput.files?.length) enqueueFiles(els.fileInput.files);
     els.fileInput.value = "";
+  });
+
+  initMergePanel({
+    setStatus,
+    onMergedFile: (file, summary) => {
+      enqueueFiles([file]);
+      setStatus(summary, "ok");
+    },
   });
 
   els.fileSelect.addEventListener("change", () => {

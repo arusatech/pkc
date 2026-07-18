@@ -21,7 +21,9 @@ const g = globalThis as typeof globalThis & {
   __LLAMA_WASM_MODULE_URL__?: string;
 };
 g.__LLAMA_WORKER_URL__ = "/llama-cpp/workers/llm.worker.js";
-g.__LLAMA_WASM_MODULE_URL__ = "/llama-cpp/wasm/llama_engine.js";const prefs = loadPrefs();
+g.__LLAMA_WASM_MODULE_URL__ = "/llama-cpp/wasm/llama_engine.js";
+
+const prefs = loadPrefs();
 state.packPkcOnProcess = prefs.packPkc;
 state.imageColorMode = prefs.colorMode;
 
@@ -31,6 +33,7 @@ initInfoModal(pkg.version);
 
 initSettingsModal({
   getActiveModelLabel: () => getActiveModelId() || "—",
+  appVersion: pkg.version,
   onSave: (next) => {
     state.packPkcOnProcess = next.packPkc;
     state.imageColorMode = next.colorMode;

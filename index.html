@@ -40,6 +40,12 @@
           </svg>
           <span>Upload</span>
         </button>
+        <button type="button" class="tab-btn" data-panel="merge" aria-pressed="false" title="Merge Study PKC files">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+          </svg>
+          <span>Merge</span>
+        </button>
         <button type="button" class="tab-btn" data-panel="blocks" aria-pressed="false" title="Blocks">
           <span>Blocks</span>
         </button>
@@ -66,6 +72,42 @@
             <p class="drop-label">Drop a file here or browse</p>
             <p class="drop-hint">pdf, docx, xlsx, pptx, csv, html, epub, pkc, …</p>
             <button type="button" id="browse-btn" class="btn-chip browse-btn">Browse files</button>
+          </div>
+        </section>
+
+        <section class="panel panel-merge" id="panel-merge" data-panel="merge" hidden>
+          <header class="panel-head">
+            <h2 class="panel-title">Merge Study PKC</h2>
+          </header>
+          <div class="merge-body">
+            <p class="storage-hint">
+              Add two or more Study PKC files, then merge. Flash cards and MCQs are combined into one pack.
+            </p>
+            <input
+              type="file"
+              id="merge-file-input"
+              hidden
+              accept=".pkc,.study.pkc,application/octet-stream"
+            />
+            <ul class="merge-file-list" id="merge-file-list" aria-label="Files to merge"></ul>
+            <p class="panel-empty merge-empty" id="merge-empty">No files yet — click Add to pick a Study PKC.</p>
+            <label class="model-field merge-name-field">
+              <span class="model-field-label">Output name (optional)</span>
+              <input
+                type="text"
+                id="merge-output-name"
+                class="text-input"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Leave blank → first file’s name"
+              />
+            </label>
+            <div class="btn-row compact merge-actions">
+              <button type="button" id="merge-add-btn" class="btn-chip">Add</button>
+              <button type="button" id="merge-run-btn" class="btn-chip" disabled>Merge</button>
+              <button type="button" id="merge-clear-btn" class="btn-chip" disabled>Clear</button>
+            </div>
+            <p class="storage-hint" id="merge-hint">Need at least 2 Study PKC files to merge.</p>
           </div>
         </section>
 
@@ -268,6 +310,55 @@
             <span class="model-field-label">Dropbox App secret (optional)</span>
             <input type="password" id="pref-dropbox-app-secret" class="text-input" autocomplete="off" spellcheck="false" />
           </label>
+          <hr class="model-divider" />
+          <p class="storage-hint settings-section-label">Diagnosis</p>
+          <div class="diag-panel" id="diag-panel" aria-live="polite">
+            <div class="diag-row">
+              <span class="diag-label">Runtime</span>
+              <span class="diag-value" id="diag-runtime">checking…</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">Active backend</span>
+              <span class="diag-value" id="diag-active">—</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">Sidecar</span>
+              <span class="diag-value" id="diag-sidecar">—</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">GPU / NPU</span>
+              <span class="diag-value" id="diag-gpu">—</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">Memory</span>
+              <span class="diag-value" id="diag-memory">—</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">Models store</span>
+              <span class="diag-value mono" id="diag-store">—</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">App</span>
+              <span class="diag-value" id="diag-app">—</span>
+            </div>
+            <label class="model-field diag-override-field">
+              <span class="model-field-label">Backend override</span>
+              <select id="diag-backend-override" class="file-select dark" aria-label="Inference backend override">
+                <option value="auto">Auto (recommended)</option>
+                <option value="sidecar-gpu">Native GPU</option>
+                <option value="sidecar-npu">Native NPU</option>
+                <option value="sidecar-cpu">Native CPU</option>
+                <option value="wasm-cpu">WASM CPU</option>
+              </select>
+            </label>
+            <p class="settings-warning" id="diag-warning" hidden></p>
+            <p class="settings-note" id="diag-note" hidden></p>
+            <div class="btn-row compact">
+              <button type="button" class="btn-chip" id="diag-refresh">Refresh</button>
+              <button type="button" class="btn-chip" id="diag-copy">Copy diagnostics</button>
+            </div>
+            <pre class="diag-dump mono" id="diag-dump" hidden></pre>
+          </div>
         </div>
         <footer class="modal-foot">
           <button type="submit" class="btn-chip" value="save" id="settings-save">Save</button>

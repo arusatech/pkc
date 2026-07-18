@@ -60,8 +60,51 @@ interface PkcExportApi {
   }>;
 }
 
+interface AnnadataLlamaApi {
+  ensureSidecar: (opts?: Record<string, unknown>) => Promise<unknown>;
+  stopSidecar: () => Promise<unknown>;
+  getSidecarStatus: () => Promise<{
+    running?: boolean;
+    port?: number | null;
+    backend?: string;
+    variant?: string;
+    permanentWasmFallback?: boolean;
+  }>;
+  getBackendStatus: () => Promise<{
+    probe?: { backends?: Array<{ name: string; kind: string; available: boolean; reason?: string }> };
+    selection?: {
+      type?: string;
+      gpuBackend?: string | null;
+      variant?: string | null;
+      reason?: string;
+    };
+    lastSelection?: {
+      type?: string;
+      gpuBackend?: string | null;
+      reason?: string;
+    };
+    sidecar?: {
+      running?: boolean;
+      port?: number | null;
+      backend?: string;
+      variant?: string;
+    };
+  }>;
+  setBackendOverride: (value: string) => Promise<{ ok?: boolean }>;
+  getBackendOverride?: () => Promise<string>;
+  getMemorySnapshot: () => Promise<{
+    totalBytes: number;
+    usedBytes: number;
+    freeBytes: number;
+    pressure: string;
+  }>;
+}
+
 interface Window {
   windowControls?: WindowControls;
   acharyaFs?: AcharyaFsApi;
   pkcExport?: PkcExportApi;
+  annadataLlama?: AnnadataLlamaApi;
+  __annadataDesktop?: boolean;
+  __annadataSidecarPort?: number;
 }

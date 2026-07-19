@@ -19,6 +19,12 @@
     "electron:start-live": "npm run build && npm --prefix electron run electron:start-live",
     "electron:pack": "npm run build && npm --prefix electron run electron:pack",
     "electron:make": "npm run build && npm --prefix electron run electron:make",
+    "electron:make:mac": "npm run build && npm --prefix electron run electron:make:mac",
+    "electron:make:win": "npm run build && npm --prefix electron run electron:make:win",
+    "release:verify:mac": "node ./scripts/release-verify.mjs mac",
+    "release:verify:win": "node ./scripts/release-verify.mjs win",
+    "release:mac": "npm run release:verify:mac && CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:make:mac",
+    "release:win": "npm run release:verify:win && npm run electron:make:win",
     "cap:add:electron": "npx cap add @capacitor-community/electron",
     "postinstall": "npm run build:js --prefix ./node_modules/llama-cpp-pro || true; npm run build --prefix ref-code/pack-it-pkc || true"
   },

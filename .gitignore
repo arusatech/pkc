@@ -157,4 +157,5 @@ vite.config.ts.timestamp-*
 electron/app/
 electron/build/
 electron/dist/
+electron/release/
 electron/node_modules/

@@ -51,21 +51,55 @@ npm run dev
 npm run electron:start
 ```
 
-## Package (Win / macOS / Linux)
+## Package / release (macOS + Windows)
+
+Artifacts land in `electron/release/`.
+
+### Prerequisites (llama sidecar)
+
+Desktop inference needs staged binaries in `llama-cpp-pro/extraResources/sidecar/`:
 
 ```bash
-npm run electron:make
+# macOS universal (arm64 + x64) — run in ../llama-cpp-pro
+npm run build:sidecar:universal && npm run stage:desktop
+npm run verify:desktop:bundle -- --arch=universal
+
+# Windows x64 — must run on Windows
+npm run build:sidecar:win && npm run stage:desktop
+npm run verify:desktop:bundle -- --platform=win32
 ```
 
-Outputs depend on the host OS (electron-builder):
+### Local release builds
+
+```bash
+# macOS → PKC-*-mac-arm64.dmg and PKC-*-mac-x64.dmg (+ .zip). Unsigned unless Apple certs are configured.
+npm run release:mac
+
+# Windows → PKC-*-win-x64-setup.exe (run on Windows, after win32 sidecar is staged)
+npm run release:win
+```
+
+Current-OS only (no platform flag): `npm run electron:make`.  
+Directory unpack without installers: `npm run electron:pack`.
+
+### CI release (recommended for .exe)
+
+Push a version tag to build both platforms and attach artifacts to a GitHub Release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Or run **Actions → Release desktop → Run workflow**. Private sibling repos need a `GH_PAT` secret with `repo` access to `arusatech/llama-cpp-pro` and `arusatech/pack-it-pkc`.
 
 | Platform | Artifacts |
 |----------|-----------|
-| Windows  | NSIS installer |
-| macOS    | DMG |
-| Linux    | AppImage, deb |
+| macOS    | DMG + zip (arm64 and x64) |
+| Windows  | NSIS `*-setup.exe` |
+| Linux    | AppImage, deb (`electron:make` on Linux) |
 
-For a directory unpack without installers: `npm run electron:pack`.
+Unsigned mac builds: Gatekeeper will warn until notarized. Windows SmartScreen may warn until code-signed.
 
 ## Layout
 
@@ -84,4 +118,6 @@ For a directory unpack without installers: `npm run electron:pack`.
 | `npm run build:web` | Production web build → `dist/` |
 | `npm run build` | Web build + `cap sync` Electron |
 | `npm run electron:start` | Build and run Electron |
+| `npm run release:mac` | Verify sidecar + build macOS DMG/zip (arm64 + x64) |
+| `npm run release:win` | Verify sidecar + build Windows NSIS installer |
 | `npm run electron:make` | Build installers for the current OS |

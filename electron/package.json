@@ -14,7 +14,9 @@
     "electron:start-live": "node ./live-runner.js",
     "electron:start": "npm run build && electron --inspect=5858 ./",
     "electron:pack": "npm run build && electron-builder build --dir -c ./electron-builder.config.cjs",
-    "electron:make": "npm run build && electron-builder build -c ./electron-builder.config.cjs -p never"
+    "electron:make": "npm run build && electron-builder build -c ./electron-builder.config.cjs -p never",
+    "electron:make:mac": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder build --mac -c ./electron-builder.config.cjs -p never",
+    "electron:make:win": "npm run build && electron-builder build --win --x64 -c ./electron-builder.config.cjs -p never"
   },
   "dependencies": {
     "@capacitor-community/electron": "^5.0.0",

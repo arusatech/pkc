@@ -53,9 +53,19 @@ const base = {
   },
 };
 
-/** llamaDesktop.merge() overwrites platform blocks; restore app targets/icons. */
+/** Merge llama desktop resources while keeping app installer / platform overrides. */
 function mergePreservingAppTargets(appBase) {
   const merged = llamaDesktop.merge(appBase);
+  // Defense in depth: llama merge now preserves nsis/deb, but re-apply app keys.
+  if (appBase.nsis) {
+    merged.nsis = { ...merged.nsis, ...appBase.nsis };
+  }
+  if (appBase.deb) {
+    merged.deb = { ...merged.deb, ...appBase.deb };
+  }
+  if (appBase.directories) {
+    merged.directories = { ...merged.directories, ...appBase.directories };
+  }
   for (const platform of ['mac', 'win', 'linux']) {
     if (!appBase[platform]) continue;
     merged[platform] = {
@@ -63,12 +73,6 @@ function mergePreservingAppTargets(appBase) {
       ...appBase[platform],
       extraResources: merged[platform]?.extraResources ?? appBase[platform].extraResources ?? [],
     };
-  }
-  if (appBase.nsis) {
-    merged.nsis = { ...merged.nsis, ...appBase.nsis };
-  }
-  if (appBase.directories) {
-    merged.directories = { ...merged.directories, ...appBase.directories };
   }
   return merged;
 }

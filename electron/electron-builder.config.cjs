@@ -3,8 +3,12 @@
  * extraResources from the installed (or file-linked) plugin package.
  *
  * Outputs land in electron/release/ (DMG/zip on macOS, NSIS Setup.exe on Windows).
+ * Windows Authenticode: Certum via electron/signing/win-certum.cjs (env-driven).
  */
 const llamaDesktop = require('llama-cpp-pro/desktop/electron-builder');
+const { winSigningFromEnv } = require('./signing/win-certum.cjs');
+
+const winSign = winSigningFromEnv();
 
 const base = {
   appId: 'ai.annadata.pkc',
@@ -27,6 +31,7 @@ const base = {
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: 'assets/appIcon.ico',
+    ...winSign,
   },
   mac: {
     category: 'public.app-category.productivity',
@@ -38,6 +43,8 @@ const base = {
     ],
     icon: 'assets/appIcon.png',
     darkModeSupport: true,
+    hardenedRuntime: true,
+    gatekeeperAssess: false,
   },
   linux: {
     target: ['AppImage', 'deb'],

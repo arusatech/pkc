@@ -69,13 +69,29 @@ npm run build:sidecar:win && npm run stage:desktop
 npm run verify:desktop:bundle -- --platform=win32
 ```
 
+### Code signing (Windows Certum + macOS Apple)
+
+**Windows (Certum):** see [`electron/signing/README.md`](electron/signing/README.md).  
+CertManager cert: [108341876](https://certmanager.certum.pl/certificate/108341876).
+
+```powershell
+# After SimplySign Desktop is unlocked and the cert is in the Windows store:
+$env:CERTUM_CERT_SHA1 = "<thumbprint-no-spaces>"
+$env:WIN_TIMESTAMP_URL = "http://time.certum.pl"
+npm run release:win
+```
+
+Copy `electron/signing/env.signing.example` → `.env.signing` for local values (gitignored).
+
+**macOS:** Certum cannot sign for Gatekeeper — use an Apple Developer ID (and notarization). Ad-hoc codesign of the llama sidecar for local Electron is separate (handled in `llama-cpp-pro` `stage:desktop`).
+
 ### Local release builds
 
 ```bash
-# macOS → PKC-*-mac-arm64.dmg and PKC-*-mac-x64.dmg (+ .zip). Unsigned unless Apple certs are configured.
+# macOS → PKC-*-mac-arm64.dmg and PKC-*-mac-x64.dmg (+ .zip)
 npm run release:mac
 
-# Windows → PKC-*-win-x64-setup.exe (run on Windows, after win32 sidecar is staged)
+# Windows → PKC-*-win-x64-setup.exe (Windows host + win32 sidecar; set CERTUM_CERT_SHA1 to sign)
 npm run release:win
 ```
 
@@ -99,7 +115,7 @@ Or run **Actions → Release desktop → Run workflow**. Private sibling repos n
 | Windows  | NSIS `*-setup.exe` |
 | Linux    | AppImage, deb (`electron:make` on Linux) |
 
-Unsigned mac builds: Gatekeeper will warn until notarized. Windows SmartScreen may warn until code-signed.
+Unsigned mac builds: Gatekeeper will warn until notarized with Apple. Windows SmartScreen improves once signed with your Certum cert ([signing guide](electron/signing/README.md)).
 
 ## Layout
 

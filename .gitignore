@@ -18,6 +18,11 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.signing
+*.pfx
+*.p12
+*.p12.bak
+electron/signing/secrets/
 
 
 # Runtime data
